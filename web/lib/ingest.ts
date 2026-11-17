@@ -259,8 +259,12 @@ export function detectLayout(grid: Grid, prefer?: { headerRow?: number; block?: 
 export type Unpivoted = { grid: Grid; leaves: number; rows: number };
 
 /** "초1 (grade 1)" → "초1", "중" → "중" */
+/** "초1 (grade 1)" → "초1", "유아 6세" → "유6", "중" → "중", "유" → "유" */
 function normGrade(v: string): string | null {
-  const m = v.match(/^(초|중|고)\s*(\d)?/);
+  const s = v.trim();
+  const kid = s.match(/^유(?:아|치)?\s*(\d)?\s*세?$/);
+  if (kid) return `유${kid[1] ?? ''}`;
+  const m = s.match(/^(초|중|고)\s*(\d)?/);
   return m ? `${m[1]}${m[2] ?? ''}` : null;
 }
 
@@ -339,8 +343,10 @@ export function unpivotWide(grid: Grid): Unpivoted | null {
       const v = text(row[d.j] ?? null);
       if (v) {
         if (TOTAL_RE.test(v)) total = true;
+        // A *different* outer label starts a new group and clears the inner ones; the same label
+        // repeated on every row (ERP writes Branch each time but leaves a repeated Program blank) does not.
+        if (v !== last[k]) for (let i = k + 1; i < last.length; i++) if (!text(row[dimCols[i].j] ?? null)) last[i] = null;
         last[k] = v;
-        for (let i = k + 1; i < last.length; i++) if (!text(row[dimCols[i].j] ?? null)) last[i] = null; // a new group clears the inner labels
       }
     });
     if (total) continue;

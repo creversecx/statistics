@@ -5,6 +5,8 @@
 -- 기본 표가 아닌 데이터셋에는 cut 이름을 붙입니다. 분석은 기본적으로 cut = '' 만 봅니다.
 alter table stat_datasets add column if not exists cut text not null default '';
 
+create index if not exists stat_facts_bsw on stat_facts (brand, semester, week);
+
 create table if not exists stat_settings (
   key text primary key,
   value jsonb not null,
@@ -32,7 +34,7 @@ begin
     when 'level' then 'f.level'
     when 'level_group' then 'f.level_group'
     when 'grade' then 'f.grade'
-    when 'grade_group' then 'case when f.grade ~ ''^초'' then ''초'' when f.grade ~ ''^중'' then ''중'' when f.grade ~ ''^고'' then ''고'' else f.grade end'
+    when 'grade_group' then 'case when f.grade ~ ''^유'' then ''유'' when f.grade ~ ''^초'' then ''초'' when f.grade ~ ''^중'' then ''중'' when f.grade ~ ''^고'' then ''고'' else f.grade end'
     when 'class_name' then 'f.class_name'
     when 'content' then 'f.content'
     when 'component' then 'f.component'
@@ -53,8 +55,16 @@ begin
     ex := stat_dim_expr(k);
     if ex is null then raise exception 'unknown dimension %', k; end if;
     if jsonb_typeof(v) = 'array' and jsonb_array_length(v) > 0 then
-      w := w || format(' and coalesce(%s, ''(없음)'') = any(%L::text[])', ex,
-        array(select jsonb_array_elements_text(v)));
+      if v ? '(없음)' then
+        w := w || format(' and coalesce(%s, ''(없음)'') = any(%L::text[])', ex, array(select jsonb_array_elements_text(v)));
+      elsif k in ('brand', 'semester') then
+        -- plain column comparison so the (brand, semester, week) index can be used
+        w := w || format(' and %s = any(%L::text[])', ex, array(select jsonb_array_elements_text(v)));
+      elsif k = 'week' then
+        w := w || format(' and f.week = any(%L::int[])', array(select (jsonb_array_elements_text(v))::int));
+      else
+        w := w || format(' and %s = any(%L::text[])', ex, array(select jsonb_array_elements_text(v)));
+      end if;
     end if;
   end loop;
   if p ? 'week_from' and (p->>'week_from') is not null then
@@ -149,12 +159,13 @@ declare
   my_cut text;
   n integer;
   removed integer := 0;
+  touched uuid[] := '{}';
 begin
   select cut into my_cut from stat_datasets where id = ds_id;
 
-  update stat_facts f set branch = b.name
-  from stat_branches b
-  where f.dataset_id = ds_id and f.brand = b.brand and f.branch = any(b.aliases);
+  update stat_facts f set branch = a.name
+  from (select brand, name, unnest(aliases) alias from stat_branches) a
+  where f.dataset_id = ds_id and f.brand = a.brand and f.branch = a.alias;
 
   -- 직/가맹만 채웁니다. 알파 여부는 학기마다 바뀌어서 표에 있는 값만 씁니다.
   update stat_facts f set branch_type = b.branch_type
@@ -162,12 +173,23 @@ begin
   where f.dataset_id = ds_id and f.brand = b.brand and f.branch = b.name
     and f.branch_type is null and b.branch_type is not null;
 
+  -- 표에 알파/4.0 열이 없을 때, 올린 사람이 원하면 학원 정보의 (최신) 값으로 채웁니다.
+  if coalesce((p->>'fill_alpha')::boolean, false) then
+    update stat_facts f set alpha = b.alpha
+    from stat_branches b
+    where f.dataset_id = ds_id and f.brand = b.brand and f.branch = b.name
+      and f.alpha is null and b.alpha is not null;
+  end if;
+
   -- 주차 시작일이 없으면 같은 브랜드·학기·주차의 다른 데이터에서 가져옵니다 (월별 보기·셀바스 기준 주차용).
   update stat_facts f set week_start = k.week_start
   from (
-    select brand, semester, week, min(week_start) week_start
-    from stat_facts where week_start is not null and dataset_id <> ds_id
-    group by brand, semester, week
+    select o.brand, o.semester, o.week, min(o.week_start) week_start
+    from stat_facts o
+    join (select distinct brand, semester, week from stat_facts where dataset_id = ds_id and week_start is null) m
+      on m.brand = o.brand and m.semester = o.semester and m.week = o.week
+    where o.week_start is not null and o.dataset_id <> ds_id
+    group by 1, 2, 3
   ) k
   where f.dataset_id = ds_id and f.week_start is null
     and f.brand = k.brand and f.semester = k.semester and f.week = k.week;
@@ -184,24 +206,29 @@ begin
 
   if coalesce((p->>'replace_overlap')::boolean, false) then
     with mine as (
-      select distinct brand, metric, coalesce(semester, '') s, coalesce(week, -1) w, coalesce(content, '') c
+      select distinct brand, metric, semester, week, coalesce(content, '') c
       from stat_facts where dataset_id = ds_id
+    ),
+    gone as (
+      delete from stat_facts f using mine m, stat_datasets d
+      where f.dataset_id <> ds_id and d.id = f.dataset_id and d.cut = my_cut
+        and f.brand = m.brand and f.metric = m.metric
+        and f.semester is not distinct from m.semester and f.week is not distinct from m.week
+        and coalesce(f.content, '') = m.c
+      returning f.dataset_id
     )
-    delete from stat_facts f using mine m, stat_datasets d
-    where f.dataset_id <> ds_id and d.id = f.dataset_id and d.cut = my_cut
-      and m.brand = f.brand and m.metric = f.metric
-      and m.s = coalesce(f.semester, '') and m.w = coalesce(f.week, -1) and m.c = coalesce(f.content, '');
-    get diagnostics removed = row_count;
+    select count(*), coalesce(array_agg(distinct dataset_id), '{}') into removed, touched from gone;
+    -- only the datasets that lost rows are recounted / dropped / re-indexed
     update stat_datasets d set row_count = (select count(*) from stat_facts f where f.dataset_id = d.id)
-    where d.id <> ds_id;
-    delete from stat_datasets d where d.id <> ds_id and d.status = 'ready'
+    where d.id = any(touched);
+    delete from stat_datasets d where d.id = any(touched)
       and not exists (select 1 from stat_facts f where f.dataset_id = d.id);
   end if;
 
   select count(*) into n from stat_facts where dataset_id = ds_id;
   update stat_datasets set status = 'ready', row_count = n where id = ds_id;
   perform stat_dataset_dims(jsonb_build_object('id', d.id))
-  from stat_datasets d where d.id = ds_id or (removed > 0 and d.status = 'ready');
+  from stat_datasets d where d.id = ds_id or d.id = any(touched);
   return jsonb_build_object('rows', n, 'removed', removed);
 end $$;
 
@@ -275,4 +302,41 @@ begin
   insert into stat_settings (key, value, updated_by) values (p->>'key', p->'value', p->>'updated_by')
   on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now();
   return jsonb_build_object('ok', true);
+end $$;
+
+-- 업로드 마무리(stat_dataset_finish)는 큰 파일에서 8초(기본 API 제한)를 넘을 수 있어 서비스 롤만 60초로 늘립니다.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'alter role service_role set statement_timeout = ''60s''';
+    notify pgrst, 'reload config';
+  end if;
+end $$;
+
+-- 학원 정보를 이미 올라간 데이터 전체에 다시 적용 (이름 별칭 + 직/가맹). 바뀐 데이터셋만 필터 목록을 다시 만듭니다.
+create or replace function stat_branch_apply(p jsonb) returns jsonb language plpgsql as $$
+declare
+  a integer;
+  b integer;
+  t1 uuid[];
+  t2 uuid[];
+begin
+  with ch as (
+    update stat_facts f set branch = al.name
+    from (select brand, name, unnest(aliases) alias from stat_branches) al
+    where f.brand = al.brand and f.branch = al.alias
+    returning f.dataset_id
+  )
+  select count(*), coalesce(array_agg(distinct dataset_id), '{}') into a, t1 from ch;
+  with ch as (
+    update stat_facts f set branch_type = m.branch_type
+    from stat_branches m
+    where f.brand = m.brand and f.branch = m.name and m.branch_type is not null
+      and f.branch_type is distinct from m.branch_type
+    returning f.dataset_id
+  )
+  select count(*), coalesce(array_agg(distinct dataset_id), '{}') into b, t2 from ch;
+  perform stat_dataset_dims(jsonb_build_object('id', d.id))
+  from stat_datasets d where d.id = any(t1 || t2);
+  return jsonb_build_object('renamed', a, 'updated', b);
 end $$;

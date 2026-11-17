@@ -66,6 +66,7 @@ export function UploadClient() {
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [cut, setCut] = useState<string | null>(null); // null = 기본 표
+  const [fillAlpha, setFillAlpha] = useState(true);
   const [wide, setWide] = useState<{ leaves: number; rows: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -293,7 +294,7 @@ export function UploadClient() {
   async function finish(id: string, replace: boolean, unread: string[] = []) {
     setBusy('마무리하는 중…');
     try {
-      const res = await post(`/api/datasets/${id}/finish`, { replace_overlap: replace });
+      const res = await post(`/api/datasets/${id}/finish`, { replace_overlap: replace, fill_alpha: fillAlpha && !has('alpha') && !!has('branch') });
       setDone({ rows: res.rows, removed: res.removed, name: name.trim() });
       setOverlap(null);
       if (unread.length) setError(`머리글을 찾지 못해 건너뛴 시트: ${unread.join(', ')}`);
@@ -632,6 +633,15 @@ export function UploadClient() {
             <Field label="콘텐츠 (표에 없을 때, 선택)">
               <input className="field !py-2" placeholder="예: Vena Talk, April Buff, CV" value={k.content} onChange={(e) => setK({ ...k, content: e.target.value })} />
             </Field>
+          )}
+          {!has('alpha') && has('branch') && (
+            <div className="md:col-span-2 xl:col-span-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">
+                <input type="checkbox" className="accent-sky-400" checked={fillAlpha} onChange={(e) => setFillAlpha(e.target.checked)} />
+                알파/4.0은 학원 정보의 현재 값으로 채우기
+              </label>
+              <p className="mt-1 text-xs text-white/55">ERP raw에는 알파 여부가 없습니다. 이번 학기 데이터라면 켜 두세요 (지난 학기 데이터면 끄는 것이 맞습니다 — 학기마다 바뀜).</p>
+            </div>
           )}
           <div className="md:col-span-2 xl:col-span-3">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">

@@ -20,9 +20,9 @@ export async function POST(req: Request, { params }: Ctx) {
   if (isResponse(me)) return me;
   const ds = await rpc<{ uploaded_by: string } | null>('stat_dataset_get', { id: params.id });
   if (!ds || ds.uploaded_by !== me.email) return NextResponse.json({ error: '업로드 중인 데이터셋이 아닙니다.' }, { status: 400 });
-  const { replace_overlap } = await req.json().catch(() => ({}));
+  const { replace_overlap, fill_alpha } = await req.json().catch(() => ({}));
   try {
-    return NextResponse.json(await rpc('stat_dataset_finish', { id: params.id, replace_overlap: !!replace_overlap }));
+    return NextResponse.json(await rpc('stat_dataset_finish', { id: params.id, replace_overlap: !!replace_overlap, fill_alpha: !!fill_alpha }));
   } catch (e) {
     return fail(e);
   }
