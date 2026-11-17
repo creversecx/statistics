@@ -10,6 +10,8 @@ export type PivotConfig = {
   /** Filters to resolve to the newest value each time the view opens (e.g. 최신 학기·주차). */
   latest?: ('semester' | 'week')[];
   sort?: 'label' | 'rate_desc' | 'rate_asc' | 'denom_desc';
+  /** A supplementary table (e.g. April 레벨별 보조표) instead of the base one. */
+  cut?: string;
   showCounts?: boolean;
 };
 
@@ -66,6 +68,24 @@ export const PRESETS: { id: string; name: string; description: string; config: P
     config: { metric: 'enroll', rows: 'brand', cols: 'semester', filters: {}, showCounts: true },
   },
   {
+    id: 'p-c-component-low',
+    name: '보완할 학습 (완료율 낮은 순)',
+    description: '최신 학기 콘텐츠·학습유형별 완료율, 낮은 것부터',
+    config: { metric: 'complete', rows: 'component', cols: null, filters: {}, latest: ['semester'], sort: 'rate_asc', showCounts: true },
+  },
+  {
+    id: 'p-c-level-component',
+    name: '레벨 × 학습 유형',
+    description: '최신 학기 어느 레벨의 어느 학습이 비는지',
+    config: { metric: 'complete', rows: 'level', cols: 'component', filters: {}, latest: ['semester'] },
+  },
+  {
+    id: 'p-c-branch-low',
+    name: '학원별 완료율 (낮은 순)',
+    description: '최신 학기 완료율이 낮은 학원',
+    config: { metric: 'complete', rows: 'branch', cols: null, filters: {}, latest: ['semester'], sort: 'rate_asc', showCounts: true },
+  },
+  {
     id: 'p-c-type-sem',
     name: '직/가맹 학습 완료율 추이',
     description: '학기별 완료율 (Vena Talk 보고 형식)',
@@ -100,8 +120,8 @@ async function query(body: Record<string, unknown>): Promise<Cell[]> {
   return (data.cells ?? []).map((c: Cell) => ({ ...c, d: Number(c.d), n: Number(c.n), np: Number(c.np), da: Number(c.da), na: Number(c.na) }));
 }
 
-export async function dimValues(metric: Metric): Promise<Record<string, string[]>> {
-  const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'dims', metric }) });
+export async function dimValues(metric: Metric, cut?: string): Promise<Record<string, string[]>> {
+  const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'dims', metric, cut: cut ?? '' }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? '목록을 불러오지 못했습니다.');
   const values: Record<string, string[]> = data.values ?? {};
@@ -113,7 +133,7 @@ export async function dimValues(metric: Metric): Promise<Record<string, string[]
 export async function resolveLatest(cfg: PivotConfig): Promise<PivotConfig> {
   if (!cfg.latest?.length) return cfg;
   const filters = { ...cfg.filters };
-  const base = { metric: cfg.metric, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
+  const base = { metric: cfg.metric, cut: cfg.cut ?? '', week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
   if (cfg.latest.includes('semester') && !filters.semester?.length) {
     const cells = await query({ ...base, filters, rows: 'semester', cols: null });
     const sems = cells.map((c) => c.r).filter((s) => s !== '(없음)').sort((a, b) => compareLabels(a, b, 'semester'));
@@ -128,7 +148,7 @@ export async function resolveLatest(cfg: PivotConfig): Promise<PivotConfig> {
 }
 
 export async function runPivot(cfg: PivotConfig): Promise<PivotResult> {
-  const base = { metric: cfg.metric, filters: cfg.filters, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
+  const base = { metric: cfg.metric, cut: cfg.cut ?? '', filters: cfg.filters, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
   const [cells, rowsOnly, colsOnly, total] = await Promise.all([
     query({ ...base, rows: cfg.rows, cols: cfg.cols }),
     cfg.cols ? query({ ...base, rows: cfg.rows, cols: null }) : Promise.resolve(null),

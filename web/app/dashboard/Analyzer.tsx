@@ -71,10 +71,10 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   }, [loadReports]);
 
   useEffect(() => {
-    dimValues(cfg.metric)
+    dimValues(cfg.metric, cfg.cut)
       .then(setValues)
       .catch((e) => setError(e.message));
-  }, [cfg.metric]);
+  }, [cfg.metric, cfg.cut]);
 
   useEffect(() => {
     if (!ready) return;
@@ -121,6 +121,10 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     const f = { ...cfg.filters };
     delete f[dim];
     edit({ filters: f, latest: (cfg.latest ?? []).filter((l) => l !== dim) });
+  }
+  function switchMetric(k: Metric) {
+    const first = PRESETS.find((p) => p.config.metric === k);
+    if (first) open('preset', first.id, first.name, first.config);
   }
   function open(kind: 'preset' | 'report', id: string, name: string, config: PivotConfig) {
     setCfg({ ...config, filters: { ...config.filters } });
@@ -250,87 +254,82 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const mine = (r: Report) => r.created_by === me.email || me.role === 'super_admin';
 
   // ---- render -------------------------------------------------------------
-  return (
-    <div className="grid gap-8 lg:grid-cols-[250px_1fr]">
-      <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-        <section>
-          <h2 className="mb-2 px-2 text-xs font-semibold tracking-widest text-white/55">기본 보기</h2>
-          <ul className="space-y-0.5">
-            {PRESETS.map((p) => (
-              <li key={p.id}>
-                <button
-                  onClick={() => open('preset', p.id, p.name, p.config)}
-                  className={`w-full rounded-xl px-3 py-2 text-left transition ${active.kind === 'preset' && active.id === p.id ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'}`}
-                >
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <span className={`h-1.5 w-1.5 rounded-full ${p.config.metric === 'enroll' ? 'bg-accent-cyan' : 'bg-accent-pink'}`} />
-                    {p.name}
-                  </span>
-                  <span className="mt-0.5 block pl-3.5 text-xs text-white/55">{p.description}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section>
-          <h2 className="mb-2 px-2 text-xs font-semibold tracking-widest text-white/55">저장한 보고서</h2>
-          <ul className="space-y-0.5">
-            {reports.map((r) => (
-              <li key={r.id} className="group relative">
-                <button
-                  onClick={() => open('report', r.id, r.name, r.config)}
-                  className={`w-full rounded-xl px-3 py-2 pr-8 text-left transition ${active.kind === 'report' && active.id === r.id ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'}`}
-                >
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <span className={`h-1.5 w-1.5 rounded-full ${r.config.metric === 'enroll' ? 'bg-accent-cyan' : 'bg-accent-pink'}`} />
-                    <span className="truncate">{r.name}</span>
-                  </span>
-                  {r.description && <span className="mt-0.5 block truncate pl-3.5 text-xs text-white/55">{r.description}</span>}
-                </button>
-                {mine(r) && (
-                  <button
-                    onClick={() => removeReport(r)}
-                    aria-label={`${r.name} 삭제`}
-                    className="absolute right-2 top-2 hidden rounded px-1.5 text-xs text-white/50 hover:text-rose-300 group-hover:block"
-                  >
-                    ×
-                  </button>
-                )}
-              </li>
-            ))}
-            {reports.length === 0 && <li className="px-3 text-xs leading-relaxed text-white/50">원하는 대로 잘라 본 뒤 “보고서로 저장”하면 여기에 쌓입니다.</li>}
-          </ul>
-        </section>
-      </aside>
+  const presets = PRESETS.filter((p) => p.config.metric === cfg.metric);
+  const cuts = (values._cuts ?? []) as string[];
 
-      <div className="min-w-0 space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold tracking-widest text-white/55">{active.kind === 'preset' ? '기본 보기' : active.kind === 'report' ? '저장한 보고서' : '직접 구성'}</p>
-            <h1 className="mt-1 text-3xl font-extrabold leading-tight">{active.name}</h1>
-            <p className="mt-1 text-sm text-white/65">{m.hint}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+  // ---- render -------------------------------------------------------------
+  return (
+    <div className="min-w-0 space-y-5">
+      {/* 지표 탭 · 저장한 보고서 · 내보내기 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-full border border-line bg-white/[0.02] p-1" role="tablist" aria-label="지표">
+          {(Object.keys(METRICS) as Metric[]).map((k) => (
             <button
-              onClick={() => {
-                const url = `${window.location.origin}/dashboard?q=${encode(cfg)}`;
-                navigator.clipboard?.writeText(url).then(() => setNotice('지금 보는 분석의 링크를 복사했습니다.'));
-              }}
-              className="btn-secondary !px-4 !py-2"
+              key={k}
+              role="tab"
+              aria-selected={cfg.metric === k}
+              onClick={() => switchMetric(k)}
+              className={`rounded-full px-5 py-2 text-sm transition ${cfg.metric === k ? 'bg-white font-semibold text-base-950' : 'text-white/75 hover:bg-white/5 hover:text-white'}`}
             >
-              링크 복사
+              {METRICS[k].label}
+              <span className={`ml-2 text-xs ${cfg.metric === k ? 'text-base-950/60' : 'text-white/45'}`}>{k === 'enroll' ? '보고' : '인사이트'}</span>
             </button>
-            <button onClick={exportXlsx} disabled={!result} className="btn-secondary !px-4 !py-2 disabled:opacity-40">
-              엑셀로 받기
-            </button>
-            <button
-              onClick={() => setSaving({ name: active.kind === 'custom' ? '' : active.name, description: '' })}
-              className="btn-primary !px-4 !py-2"
-            >
-              보고서로 저장
-            </button>
-          </div>
+          ))}
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ReportsMenu
+            reports={reports}
+            activeId={active.kind === 'report' ? active.id : undefined}
+            mine={mine}
+            onOpen={(r) => open('report', r.id, r.name, r.config)}
+            onRemove={removeReport}
+          />
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/dashboard?q=${encode(cfg)}`;
+              navigator.clipboard?.writeText(url).then(() => setNotice('지금 보는 분석의 링크를 복사했습니다.'));
+            }}
+            className="btn-secondary !px-4 !py-2"
+          >
+            링크 복사
+          </button>
+          <button onClick={exportXlsx} disabled={!result} className="btn-secondary !px-4 !py-2 disabled:opacity-40">
+            엑셀로 받기
+          </button>
+          <button onClick={() => setSaving({ name: active.kind === 'custom' ? '' : active.name, description: '' })} className="btn-primary !px-4 !py-2">
+            보고서로 저장
+          </button>
+        </div>
+      </div>
+
+      {/* 이 지표의 기본 보기 */}
+      <nav className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line px-1 [scrollbar-width:thin]" aria-label="보기">
+        {presets.map((p) => {
+          const on = active.kind === 'preset' && active.id === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => open('preset', p.id, p.name, p.config)}
+              title={p.description}
+              aria-current={on ? 'page' : undefined}
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm transition ${on ? 'border-accent-cyan font-semibold text-white' : 'border-transparent text-white/65 hover:text-white'}`}
+            >
+              {p.name}
+            </button>
+          );
+        })}
+        {active.kind !== 'preset' && (
+          <span className="-mb-px shrink-0 whitespace-nowrap border-b-2 border-accent-pink px-3.5 py-2.5 text-sm font-semibold text-white">{active.name}</span>
+        )}
+      </nav>
+
+      <div>
+        <h1 className="text-3xl font-extrabold leading-tight">{active.name}</h1>
+        <p className="mt-1 text-sm text-white/65">
+          {active.kind === 'preset' ? `${PRESETS.find((p) => p.id === active.id)?.description ?? ''} · ` : ''}
+          {m.hint}
+        </p>
+      </div>
 
         {saving && (
           <form
@@ -363,28 +362,32 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
           </p>
         )}
 
-        {/* 지표 · 필터 · 배치 */}
+        {/* 필터 · 배치 */}
         <div className="card relative z-30 space-y-4 !p-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-full border border-line bg-white/[0.02] p-1" role="tablist" aria-label="지표">
-              {(Object.keys(METRICS) as Metric[]).map((k) => (
-                <button
-                  key={k}
-                  role="tab"
-                  aria-selected={cfg.metric === k}
-                  onClick={() => edit({ metric: k, filters: {}, latest: cfg.latest })}
-                  className={`rounded-full px-4 py-1.5 text-sm transition ${cfg.metric === k ? 'bg-white font-semibold text-base-950' : 'text-white/75 hover:bg-white/5'}`}
-                >
-                  {METRICS[k].label}
-                </button>
-              ))}
+          {((cfg.latest ?? []).length > 0 || cuts.length > 0) && (
+            <div className="flex flex-wrap items-center gap-3">
+              {cuts.length > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-white/60">집계표</span>
+                  <div className="flex rounded-full border border-line p-0.5">
+                    {['', ...cuts].map((c) => (
+                      <button
+                        key={c || 'base'}
+                        onClick={() => edit({ cut: c || undefined, filters: {} })}
+                        title={c ? '같은 학생을 다른 기준으로 나눈 보조표 (기본 표와 더하지 않음)' : '학원별 기본 표'}
+                        className={`rounded-full px-3 py-1 text-xs transition ${(cfg.cut ?? '') === c ? 'bg-white font-semibold text-base-950' : 'text-white/75 hover:bg-white/5'}`}
+                      >
+                        {c || '기본'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(cfg.latest ?? []).length > 0 && (
+                <span className="tag-pill">{(cfg.latest ?? []).map((l) => DIM_LABEL[l]).join('·')}은 항상 최신 값</span>
+              )}
             </div>
-            {(cfg.latest ?? []).length > 0 && (
-              <span className="tag-pill">
-                {(cfg.latest ?? []).map((l) => DIM_LABEL[l]).join('·')}은 항상 최신 값
-              </span>
-            )}
-          </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             {filterDims.map((d) => (
@@ -552,7 +555,6 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
             )}
           </>
         )}
-      </div>
     </div>
   );
 }
@@ -649,3 +651,75 @@ function PivotTable({ result, cfg, fmt }: { result: PivotResult; cfg: PivotConfi
 }
 
 const Cellx = ({ node }: { node: React.ReactNode }) => <>{node}</>;
+
+/** 저장한 보고서: a button that opens the list, so the page itself stays uncluttered. */
+function ReportsMenu({
+  reports,
+  activeId,
+  mine,
+  onOpen,
+  onRemove,
+}: {
+  reports: Report[];
+  activeId?: string;
+  mine: (r: Report) => boolean;
+  onOpen: (r: Report) => void;
+  onRemove: (r: Report) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  return (
+    <div ref={box} className="relative z-40">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="btn-secondary !px-4 !py-2">
+        저장한 보고서 <span className="text-white/55">{reports.length}</span> <span className="text-white/45">▾</span>
+      </button>
+      {open && (
+        <div className="rise-in absolute right-0 top-[calc(100%+6px)] w-80 rounded-2xl border border-line bg-base-900 p-2 shadow-2xl">
+          {reports.length === 0 && <p className="px-3 py-4 text-xs leading-relaxed text-white/60">원하는 대로 잘라 본 뒤 “보고서로 저장”하면 여기에 쌓이고, 모두가 볼 수 있습니다.</p>}
+          <ul className="max-h-96 overflow-auto">
+            {reports.map((r) => (
+              <li key={r.id} className="group relative">
+                <button
+                  onClick={() => {
+                    onOpen(r);
+                    setOpen(false);
+                  }}
+                  className={`w-full rounded-xl px-3 py-2 pr-8 text-left transition ${activeId === r.id ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'}`}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.config.metric === 'enroll' ? 'bg-accent-cyan' : 'bg-accent-pink'}`} />
+                    <span className="truncate">{r.name}</span>
+                  </span>
+                  <span className="mt-0.5 block truncate pl-3.5 text-xs text-white/55">
+                    {METRICS[r.config.metric].label}
+                    {r.description ? ` · ${r.description}` : ''}
+                  </span>
+                </button>
+                {mine(r) && (
+                  <button
+                    onClick={() => onRemove(r)}
+                    aria-label={`${r.name} 삭제`}
+                    className="absolute right-2 top-2 hidden rounded px-1.5 text-xs text-white/50 hover:text-rose-300 group-hover:block"
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

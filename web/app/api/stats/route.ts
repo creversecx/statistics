@@ -12,9 +12,10 @@ export async function POST(req: Request) {
   if (isResponse(me)) return me;
   const body = await req.json().catch(() => ({}));
   const metric = body.metric === 'complete' ? 'complete' : 'enroll';
+  const cut = typeof body.cut === 'string' ? body.cut.slice(0, 60) : '';
   try {
     if (body.op === 'dims') {
-      return NextResponse.json({ values: await rpc('stat_dim_values', { metric }) });
+      return NextResponse.json({ values: await rpc('stat_dim_values', { metric, cut }) });
     }
     const filters: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(body.filters ?? {})) {
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
     }
     const p = {
       metric,
+      cut,
       rows: isDim(body.rows) ? body.rows : null,
       cols: isDim(body.cols) ? body.cols : null,
       filters,

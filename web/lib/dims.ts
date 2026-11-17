@@ -36,6 +36,7 @@ export const DIMS = [
   { id: 'level', label: '레벨' },
   { id: 'level_group', label: '레벨 그룹' },
   { id: 'grade', label: '학년' },
+  { id: 'grade_group', label: '학년그룹' },
   { id: 'class_name', label: '반' },
   { id: 'content', label: '콘텐츠' },
   { id: 'component', label: '학습 유형' },

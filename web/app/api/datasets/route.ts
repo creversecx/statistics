@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       source_sheets: Array.isArray(body.source_sheets) ? body.source_sheets.map(String) : [],
       mapping: body.mapping ?? {},
       note: String(body.note ?? ''),
+      cut: typeof body.cut === 'string' ? body.cut.trim().slice(0, 40) : '',
       uploaded_by: me.email,
     });
     return NextResponse.json(res);

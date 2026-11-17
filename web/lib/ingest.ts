@@ -252,6 +252,120 @@ export function detectLayout(grid: Grid, prefer?: { headerRow?: number; block?: 
   return { headerRow, blocks, block, columns, fillDown: counted > 0 && blanks / counted > 0.15 };
 }
 
+// ---------------------------------------------------------------------------
+// 가로로 펼친 ERP 피벗 (Week → 학년그룹 → 학년 → 재원생 수 / 학습대상자수 / Rate)
+// ---------------------------------------------------------------------------
+
+export type Unpivoted = { grid: Grid; leaves: number; rows: number };
+
+/** "초1 (grade 1)" → "초1", "중" → "중" */
+function normGrade(v: string): string | null {
+  const m = v.match(/^(초|중|고)\s*(\d)?/);
+  return m ? `${m[1]}${m[2] ?? ''}` : null;
+}
+
+/**
+ * ERP report exports with measures repeated across the columns, one block per
+ * week (and per 학년) — the shape the IT team's API will send. Turns them
+ * into a long table: one row per (원래 행 × 주차 × 학년) with the row labels
+ * filled in, subtotal rows and Total columns dropped. Returns null when the
+ * sheet isn't laid out that way.
+ */
+export function unpivotWide(grid: Grid): Unpivoted | null {
+  const scan = Math.min(grid.length, 15);
+  let mrow = -1;
+  for (let r = 0; r < scan; r++) {
+    const row = grid[r] ?? [];
+    const denoms = row.filter((c) => typeof c === 'string' && fieldFromHeader(c) === 'denom').length;
+    const numers = row.filter((c) => typeof c === 'string' && fieldFromHeader(c) === 'numer').length;
+    if (denoms >= 2 && numers >= 2) {
+      mrow = r;
+      break;
+    }
+  }
+  if (mrow < 0) return null;
+  const width = Math.max(...grid.slice(0, mrow + 1).map((r) => (r ?? []).length), 0);
+  const meas = grid[mrow] ?? [];
+  const first = meas.findIndex((c) => typeof c === 'string' && ['denom', 'numer'].includes(fieldFromHeader(c) ?? ''));
+  // Column paths: header rows above the measure row, carried to the right from the first measure column on.
+  const paths: string[][] = Array.from({ length: width }, () => []);
+  for (let r = 0; r < mrow; r++) {
+    let last = '';
+    for (let j = first; j < width; j++) {
+      const v = text((grid[r] ?? [])[j] ?? null);
+      if (v) last = v;
+      if (last) paths[j].push(last);
+    }
+  }
+  type Leaf = { week: number | null; grade: string | null; other: string | null; cols: Partial<Record<'denom' | 'numer' | 'rest', number>> };
+  const leaves = new Map<string, Leaf>();
+  for (let j = first; j < width; j++) {
+    const f = fieldFromHeader(meas[j]);
+    if (f !== 'denom' && f !== 'numer' && f !== 'rest') continue;
+    const path = paths[j];
+    if (path.some((p) => TOTAL_RE.test(p))) continue;
+    let week: number | null = null;
+    let grade: string | null = null;
+    let other: string | null = null;
+    for (const p of path) {
+      if (/week|wk|주차/i.test(p) && parseWeek(p) !== null) week = parseWeek(p);
+      else if (normGrade(p)) {
+        // The path holds both 학년그룹 ("초") and 학년 ("초3 (grade 3)"): keep the more specific one.
+        const g = normGrade(p)!;
+        if (grade === null || g.length >= grade.length) grade = g;
+      }
+      else if (!/^(학년|학년그룹|level group|week|구분)/i.test(p)) other = p;
+    }
+    if (week === null && grade === null && other === null) continue;
+    const key = `${week}|${grade}|${other}`;
+    const leaf = leaves.get(key) ?? { week, grade, other, cols: {} };
+    if (leaf.cols[f] === undefined) leaf.cols[f] = j;
+    leaves.set(key, leaf);
+  }
+  const usable = [...leaves.values()].filter((l) => l.cols.numer !== undefined && (l.cols.denom !== undefined || l.cols.rest !== undefined));
+  if (usable.length === 0) return null;
+
+  const dimCols = Array.from({ length: first }, (_, j) => ({ j, label: text(meas[j] ?? null) })).filter((d) => d.label);
+  const hasOther = usable.some((l) => l.other !== null);
+  const header: Cell[] = [...dimCols.map((d) => d.label), '주차', '학년', ...(hasOther ? ['프로그램'] : []), '재원생 수', '학습대상자수', '미수강생'];
+  const out: Grid = [header];
+  const last: (string | null)[] = dimCols.map(() => null);
+  let rows = 0;
+  for (let r = mrow + 1; r < grid.length; r++) {
+    const row = grid[r];
+    if (!row) continue;
+    let total = false;
+    dimCols.forEach((d, k) => {
+      const v = text(row[d.j] ?? null);
+      if (v) {
+        if (TOTAL_RE.test(v)) total = true;
+        last[k] = v;
+        for (let i = k + 1; i < last.length; i++) if (!text(row[dimCols[i].j] ?? null)) last[i] = null; // a new group clears the inner labels
+      }
+    });
+    if (total) continue;
+    let any = false;
+    for (const l of usable) {
+      const n = row[l.cols.numer!];
+      const d = l.cols.denom !== undefined ? row[l.cols.denom] : null;
+      const rest = l.cols.rest !== undefined ? row[l.cols.rest] : null;
+      if (!isNum(n) && !isNum(d) && !isNum(rest)) continue;
+      any = true;
+      out.push([
+        ...last,
+        l.week !== null ? `Week ${l.week}` : null,
+        l.grade,
+        ...(hasOther ? [l.other] : []),
+        isNum(d) ? d : null,
+        isNum(n) ? n : 0,
+        isNum(rest) ? rest : null,
+      ]);
+    }
+    if (any) rows++;
+  }
+  return { grid: out, leaves: usable.length, rows };
+}
+
 export function colName(i: number) {
   let s = '';
   let n = i + 1;

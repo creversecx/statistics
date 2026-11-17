@@ -10,6 +10,7 @@ import {
   extract,
   guessBrand,
   guessMetric,
+  unpivotWide,
   type Constants,
   type FactRow,
   type FieldId,
@@ -64,6 +65,8 @@ export function UploadClient() {
   });
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
+  const [cut, setCut] = useState<string | null>(null); // null = 기본 표
+  const [wide, setWide] = useState<{ leaves: number; rows: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,8 +149,14 @@ export function UploadClient() {
     try {
       let source = buf;
       if (!source && f) source = /\.csv$/i.test(f.name) ? await readCsv(f) : await f.arrayBuffer();
-      const g = (await readSheets([next[0]], source, f))[next[0]];
+      const raw = (await readSheets([next[0]], source, f))[next[0]];
+      // ERP exports with weeks/학년 spread across the columns are read as one long table.
+      const u = unpivotWide(raw);
+      const g = u ? u.grid : raw;
+      setWide(u ? { leaves: u.leaves, rows: u.rows } : null);
       setGrid(g);
+      const sheetBrand = guessBrand(next[0]);
+      if (sheetBrand) setK((c) => ({ ...c, brand: sheetBrand }));
       const l = detectLayout(g);
       setLayout(l);
       if (l) setK((c) => ({ ...c, metric: guessMetric(l) }));
@@ -226,8 +235,9 @@ export function UploadClient() {
       let used = 0;
       const unread: string[] = [];
       for (const s of picked) {
-        const g = grids[s];
-        if (!g) continue;
+        const g0 = grids[s];
+        if (!g0) continue;
+        const g = s === picked[0] ? g0 : unpivotWide(g0)?.grid ?? g0;
         const l = s === picked[0] ? layout : adapt(layout, g);
         if (!l) {
           unread.push(s);
@@ -248,6 +258,7 @@ export function UploadClient() {
         source_file: file.name,
         source_sheets: picked,
         note,
+        cut: cut?.trim() || '',
         mapping: {
           headerRow: layout.headerRow,
           block: layout.block,
@@ -460,6 +471,11 @@ export function UploadClient() {
             <div>
               <h2 className="font-semibold">열 맞추기</h2>
               <p className="text-xs text-white/60">열 이름과 값으로 자동으로 맞췄습니다. 틀린 곳만 고치세요.</p>
+              {wide && (
+                <p className="mt-1 text-xs text-accent-cyan">
+                  주차·학년이 가로로 펼쳐진 ERP 표라서 세로로 바꿔 읽었습니다 · 원래 {wide.rows.toLocaleString('ko-KR')}행 × {wide.leaves}개 열 묶음
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <label className="flex items-center gap-2">
@@ -617,6 +633,16 @@ export function UploadClient() {
               <input className="field !py-2" placeholder="예: Vena Talk, April Buff, CV" value={k.content} onChange={(e) => setK({ ...k, content: e.target.value })} />
             </Field>
           )}
+          <div className="md:col-span-2 xl:col-span-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">
+              <input type="checkbox" className="accent-sky-400" checked={cut !== null} onChange={(e) => setCut(e.target.checked ? '레벨별' : null)} />
+              보조 집계표로 올리기
+            </label>
+            <p className="mt-1 text-xs leading-relaxed text-white/55">
+              같은 학생을 다른 기준으로 한 번 더 나눈 표(예: 주간 시트의 학원별 표와 레벨별 표)는 합치면 두 번 세어집니다. 보조표로 올리면 분석에서 따로 골라 보고, 셀바스 정산은 프로그램·레벨이 있는 표를 알아서 씁니다.
+            </p>
+            {cut !== null && <input className="field mt-2 !w-56 !py-1.5 !text-xs" placeholder="보조표 이름 (예: 레벨별)" value={cut} onChange={(e) => setCut(e.target.value)} />}
+          </div>
           <Field label="메모 (선택)" wide>
             <input className="field !py-2" placeholder="예: ERP 기준일 11/09, 셀바스용 제외" value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>

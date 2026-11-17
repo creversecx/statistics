@@ -6,6 +6,7 @@ import { BrandMeta, LogoMark, Wordmark } from '@/components/ui/Brand';
 
 const LINKS = [
   { href: '/dashboard', label: '분석' },
+  { href: '/selvas', label: '셀바스 정산' },
   { href: '/upload', label: '데이터 올리기' },
   { href: '/datasets', label: '데이터셋' },
 ];

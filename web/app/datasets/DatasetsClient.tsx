@@ -11,6 +11,7 @@ type Dataset = {
   name: string;
   brand: string;
   metric: Metric;
+  cut?: string;
   source_file: string;
   source_sheets: string[];
   row_count: number;
@@ -122,6 +123,7 @@ export function DatasetsClient({ me }: { me: { email: string; role: string } }) 
                         {METRICS[d.metric].short}
                       </span>
                       <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-white/75">{brandName(d.brand)}</span>
+                      {d.cut && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[11px] text-amber-200" title="같은 학생을 다른 기준으로 나눈 보조표 — 기본 분석과 더하지 않음">보조표 · {d.cut}</span>}
                       <span className="font-semibold">{d.name}</span>
                     </div>
                     <p className="mt-1.5 text-xs text-white/60">
