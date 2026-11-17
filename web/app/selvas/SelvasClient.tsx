@@ -89,7 +89,7 @@ export function SelvasClient({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
         <p className="max-w-md text-xs leading-relaxed text-white/60">
-          기준 주차 = 그 달에 시작하는 마지막 주 (새 학기 1주차면 앞 학기 마지막 주). 청담 중등관은 초등관 기준 주차와 시작일이 같은 주. 다르게 보고했다면 카드마다 주차를 바꿀 수 있습니다.
+          기준 주차 = 그 달에 시작하는 마지막 주 (새 학기 1주차면 앞 학기 마지막 주). 청담 Prime관은 일반관 기준 주차와 시작일이 같은 주. 다르게 보고했다면 카드마다 주차를 바꿀 수 있습니다.
         </p>
       </div>
 
@@ -133,7 +133,7 @@ export function SelvasClient({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-type PartState = { brand: string; label: string; week: WeekInfo | null; bill: Bill | null; cut: string; noProgram: boolean; loading: boolean };
+type PartState = { brand: string; label: string; week: WeekInfo | null; bill: Bill | null; cut: string; noProgram: boolean; summaryTotal: number | null; loading: boolean };
 
 function TargetCard({
   target,
@@ -167,7 +167,7 @@ function TargetCard({
       const list = brandWeeks(p.brand);
       const override = chosen[p.brand] ? list.find((w) => weekKey(w) === chosen[p.brand]) : null;
       const week = override ?? auto[p.brand];
-      return { ...p, week, bill: null, cut: '', noProgram: false, loading: !!week };
+      return { ...p, week, bill: null, cut: '', noProgram: false, summaryTotal: null, loading: !!week };
     });
     setParts(base);
     base.forEach((p, i) => {
@@ -176,7 +176,8 @@ function TargetCard({
         .then((r) => {
           if (!alive) return;
           const noProgram = r.rows.every((x) => x.program === '(없음)');
-          setParts((cur) => cur.map((c, j) => (j === i ? { ...c, cut: r.cut, noProgram, bill: noProgram ? null : computeBill(target, p.week!, r.rows), loading: false } : c)));
+          const summaryTotal = r.rows.reduce((a, x) => a + x.n, 0);
+          setParts((cur) => cur.map((c, j) => (j === i ? { ...c, cut: r.cut, noProgram, summaryTotal, bill: noProgram ? null : computeBill(target, p.week!, r.rows), loading: false } : c)));
         })
         .catch(() => alive && setParts((cur) => cur.map((c, j) => (j === i ? { ...c, loading: false } : c))));
     });
@@ -199,8 +200,8 @@ function TargetCard({
       const b = usable[0].bill!;
       return [`<${ml} April어학원 회원 리포트>`, '레벨\t수강생', ...b.groups.map((g) => `${g.name}\t${fmtCount(g.n)}`), `Total\t${fmtCount(b.counted)}`].join('\n');
     }
-    const detail = usable.map((p) => `${p.label.replace(/ \(Prime\)/, '')} ${fmtCount(p.bill!.counted)}`).join(' + ');
-    const basis = usable.map((p) => `${p.label.replace(/ \(Prime\)/, '')}Week${p.week!.week}`).join('/');
+    const detail = usable.map((p) => `${p.label} ${fmtCount(p.bill!.counted)}`).join(' + ');
+    const basis = usable.map((p) => `${p.label}Week${p.week!.week}`).join('/');
     return [
       `${month.slice(2, 4)}년 ${ml} 온라인 수강 학생수 : ${fmtCount(total)}(${detail})명 (${basis} 기준)`,
       fee !== null ? `사용료 : ${fee.toLocaleString('ko-KR')}원(* VAT 포함)` : '',
@@ -262,7 +263,8 @@ function TargetCard({
             {!p.loading && !p.week && <p className="text-xs text-amber-200">{ml}에 시작하는 주차 데이터가 없습니다.</p>}
             {!p.loading && p.noProgram && (
               <p className="text-xs leading-relaxed text-amber-200">
-                이 주차는 학기 요약 수치만 있고 프로그램·레벨이 없어 셀바스 대상을 가릴 수 없습니다. ERP raw(Program·Level 포함)를 올리면 계산됩니다.
+                {p.week?.semester} Week {p.week?.week}({md(p.week?.week_start ?? null)}~)은 학기 요약 수치만 있습니다
+                {p.summaryTotal ? ` — 수강생 ${fmtCount(p.summaryTotal)}명(MASTER 포함)` : ''}. 셀바스 대상을 가르려면 MASTER 등을 빼야 해서, 이 주차의 ERP raw(Program·Level 포함)를 올려 주세요.
               </p>
             )}
             {p.bill && (

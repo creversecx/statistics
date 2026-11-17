@@ -3,8 +3,11 @@
  *
  * 2026년 8~10월 실제 청구 메일과 맞춰 본 규칙입니다.
  *  - April:  8월 18,170 · 9월 18,597 · 10월 18,413 — 레벨별 숫자까지 모두 일치
- *  - 청담:   초등관(CD) + 중등관(CD Prime) 수강생, 셀바스 사용 프로그램·레벨만 (= TS·MASTER·B2 제외)
+ *  - 청담:   일반관(CD) + Prime관(CD Prime) 수강생, 셀바스 사용 프로그램·레벨만 (= TS·MASTER·B2 제외)
  *            raw의 Week 5~7에서 TS 제외 합계가 학기 요약 시트와 정확히 같고, 청구 인원 = 요약 합계 − MASTER
+ *            (10월: 일반관 W8 14,150.5 − 400 = 13,750.5 · Prime관 W9 422.5 − 146.5 = 276 → 14,026.5)
+ *  - 인원 단위: ERP가 이미 C1·C2·C2 debate처럼 함께 듣는 프로그램은 프로그램당 0.5명, F1 같은 단독 프로그램은 1명으로
+ *            세어서 내보냅니다 (raw의 F1 칸은 모두 정수, C1·C2 칸은 0.5 단위). 그래서 학습대상자수를 그대로 더하면 사람 수가 됩니다.
  *
  * 규칙이 바뀌면 이 파일만 고치면 됩니다.
  */
@@ -25,9 +28,9 @@ export type Target = {
   id: 'AP' | 'CD';
   name: string;
   /**
-   * Brands summed into this bill (청담 = 초등관 + 중등관). A part with `sameDateAs` uses the week that
-   * starts on the same date as that part's billing week (중등관 numbers its weeks differently:
-   * 9월 = 초등관 W4 / 중등관 W4 (09-21), 10월 = 초등관 W8 / 중등관 W9 (10-26)).
+   * Brands summed into this bill (청담 = 일반관 + Prime관). A part with `sameDateAs` uses the week that
+   * starts on the same date as that part's billing week (Prime관 numbers its weeks differently:
+   * 9월 = 일반관 W4 / Prime관 W4 (09-21), 10월 = 일반관 W8 / Prime관 W9 (10-26)).
    */
   parts: { brand: string; label: string; sameDateAs?: string }[];
   /** Is this program·level counted? `term` decides 봄/가을 vs 여름/겨울 lists. */
@@ -85,8 +88,8 @@ export const TARGETS: Target[] = [
     id: 'CD',
     name: '청담',
     parts: [
-      { brand: 'CD', label: '초등관' },
-      { brand: 'CD_Prime', label: '중등관 (Prime)', sameDateAs: 'CD' },
+      { brand: 'CD', label: '일반관' },
+      { brand: 'CD_Prime', label: 'Prime관', sameDateAs: 'CD' },
     ],
     counts: (program, level, term) => {
       const set = term === '여름' || term === '겨울' ? CD_LEVELS.여름겨울 : CD_LEVELS.봄가을;
@@ -95,8 +98,9 @@ export const TARGETS: Target[] = [
     groupOf: (program) => cdProgram(program),
     groupOrder: ['C1', 'C2', 'C2D', 'F1', 'A2', 'A3', 'V1'],
     rules: [
-      '기준 주차의 i-Learning 수강생(학습대상자) 수, 초등관 + 중등관(Prime) 합산',
-      '중등관은 초등관 기준 주차와 시작일이 같은 주 (주차 번호가 달라서 10월 = 초등관 W8 · 중등관 W9)',
+      '기준 주차의 i-Learning 수강생(학습대상자) 수, 일반관 + Prime관 합산',
+      'Prime관은 일반관 기준 주차와 시작일이 같은 주 (주차 번호가 달라서 10월 = 일반관 W8 · Prime관 W9)',
+      '인원: C1·C2·C2 debate처럼 함께 듣는 프로그램은 프로그램당 0.5명(2개 = 1명), F1 같은 단독 프로그램은 1명 — ERP raw가 이미 이렇게 세어 주므로 그대로 더함',
       '셀바스 음성인식 사용 프로그램·레벨만 — 봄/가을: C1·C2 (EC4~Albatross+), C2 debate (Eagle~Albatross+), F1 (EC1~EC4)',
       '여름/겨울: A2·V1 (Mega~Albatross+), A3 (Mega~Birdie), C1·C2 (EC4), F1 (EC1~EC4)',
       '결과적으로 TS · MASTER(D/GL/IM/ST/WD…) · B2(Jump) 는 빠짐',

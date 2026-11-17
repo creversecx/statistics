@@ -48,8 +48,8 @@ export const DIM_LABEL = Object.fromEntries(DIMS.map((d) => [d.id, d.label])) as
 export const isDim = (v: unknown): v is DimId => DIMS.some((d) => d.id === v);
 
 export const BRANDS = [
-  { id: 'CD', name: '청담 (CDI)' },
-  { id: 'CD_Prime', name: '청담 Prime' },
+  { id: 'CD', name: '청담 일반관' },
+  { id: 'CD_Prime', name: '청담 Prime관' },
   { id: 'AP', name: 'April' },
   { id: 'iG', name: 'i-GARTEN' },
   { id: 'TO', name: 'The Open' },
