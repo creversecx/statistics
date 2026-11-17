@@ -1,5 +1,6 @@
 // 비밀번호를 직접 정합니다 (메일 발송(Resend)을 아직 연결하지 않았을 때 첫 슈퍼어드민용).
-//   npm run set-password -- kykim@creverse.com
+//   npm run set-password -- kykim@creverse.com --prod   (운영)
+//   npm run set-password -- kykim@creverse.com          (로컬 PGlite)
 // .env.local의 Supabase 값을 쓰고, 없으면 로컬 개발 DB(.pglite)에 씁니다. 비밀번호는 화면에 입력합니다(기록 안 남음).
 import fs from 'fs';
 import path from 'path';
@@ -35,7 +36,9 @@ const hash = await bcrypt.hash(pw, 10);
 const p = { email, password_hash: hash };
 
 let result;
-if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.DB_MODE !== 'local') {
+// --prod: 운영 Supabase에 씁니다 (.env.local에 DB_MODE=local이 있어도)
+const prod = process.argv.includes('--prod');
+if (process.env.NEXT_PUBLIC_SUPABASE_URL && (prod || process.env.DB_MODE !== 'local')) {
   const { createClient } = await import('@supabase/supabase-js');
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const { data, error } = await db.rpc('stat_user_update', { p });
