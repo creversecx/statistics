@@ -74,6 +74,7 @@ export const TARGETS: Target[] = [
     counts: (r) => {
       const g = r.level_group ?? '(없음)';
       if (/^phonics/i.test(g) || /^phonics/i.test(r.level)) return false;
+      if (/^rise\s*sapling/i.test(g) || /^rise\s*sapling/i.test(r.level)) return false;
       if (/^ivy/i.test(g)) return /prep/i.test(r.level);
       return g !== '(없음)';
     },
@@ -82,6 +83,7 @@ export const TARGETS: Target[] = [
     rules: [
       '기준 주차의 온라인 수강생(학습대상자) 수, Alpha + 4.0 합산',
       'Phonics 제외',
+      'Rise Sapling 제외',
       'ivy는 Prep만 포함 (ivy Level 1·2는 셀바스 엔진 미사용, 26 봄학기부터)',
       '레벨 그룹(Seedbed·Seed·Sprout·Sapling·Junior Master·Rookie)별로 묶어서 보고',
     ],
@@ -178,7 +180,10 @@ export function computeBill(target: Target, week: WeekInfo, rows: ProgramRow[]):
       const g = target.groupOf(r);
       groups.set(g, (groups.get(g) ?? 0) + r.n);
     } else {
-      const key = target.id === 'CD' && r.level === 'MASTER' ? 'MASTER' : `${r.program}${r.level !== '(없음)' ? ` ${r.level}` : ''}`;
+      const key =
+        target.id === 'CD' && r.level === 'MASTER'
+          ? 'MASTER'
+          : [r.program, r.level].filter((x) => x && x !== '(없음)').join(' ') || '(구분 없음)';
       excluded.set(key, (excluded.get(key) ?? 0) + r.n);
     }
   }

@@ -81,7 +81,7 @@ e-Library 구간별 완독 분포(학생 단위 분포)는 이번 범위에 없�
 
 | | 셀바스 대상 | 비고 |
 |---|---|---|
-| April | 기준 주차 수강생 − Phonics − ivy Level 1·2 (ivy Prep 포함) | 프로그램별로 보고 |
+| April | 기준 주차 수강생 − Phonics − Rise Sapling − ivy Level 1·2 (ivy Prep 포함) | 프로그램별로 보고 |
 | 청담 | 일반관(CD) + Prime관(CD_Prime) 수강생 중 참고사항의 프로그램·레벨만 (C2D = "C2 debate") | 결과적으로 TS·MASTER·B2 제외, 220원/명 VAT 포함 |
 
 - **기준 주차**: 그 달에 시작하는 마지막 주. 그 주가 새 학기 1주차면 앞 학기 마지막 주 (8월 = 여름 W13). 청담 Prime관은 일반관 기준 주차와 **시작일이 같은 주** (10월 = 일반관 W8 · Prime관 W9).
