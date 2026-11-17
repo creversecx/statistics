@@ -13,6 +13,13 @@ body {
   color: #f5f6fa;
 }
 
+/* Native dropdown lists render on the OS's white sheet: give options the dark surface so their text shows. */
+select option,
+select optgroup {
+  background-color: #0a0d1a;
+  color: #f5f6fa;
+}
+
 :focus-visible {
   outline: 2px solid #38bdf8;
   outline-offset: 2px;

@@ -364,7 +364,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
         )}
 
         {/* 지표 · 필터 · 배치 */}
-        <div className="card space-y-4 !p-5">
+        <div className="card relative z-30 space-y-4 !p-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-full border border-line bg-white/[0.02] p-1" role="tablist" aria-label="지표">
               {(Object.keys(METRICS) as Metric[]).map((k) => (

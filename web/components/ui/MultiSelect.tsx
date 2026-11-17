@@ -67,7 +67,7 @@ export function MultiSelect({
         </span>
       </button>
       {open && (
-        <div className="rise-in absolute left-0 top-[calc(100%+6px)] z-50 w-72 rounded-2xl border border-line bg-base-900/95 p-2 shadow-2xl backdrop-blur-xl">
+        <div className="rise-in absolute left-0 top-[calc(100%+6px)] z-50 w-72 rounded-2xl border border-line bg-base-900 p-2 shadow-2xl">
           {options.length > 8 && (
             <input autoFocus className="field mb-2 !rounded-lg !py-2 !text-xs" placeholder="검색" value={q} onChange={(e) => setQ(e.target.value)} />
           )}
