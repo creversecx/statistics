@@ -74,16 +74,16 @@ export const TARGETS: Target[] = [
     counts: (r) => {
       const g = r.level_group ?? '(없음)';
       if (/^phonics/i.test(g) || /^phonics/i.test(r.level)) return false;
-      if (/^rise\s*sapling/i.test(g) || /^rise\s*sapling/i.test(r.level)) return false;
       if (/^ivy/i.test(g)) return /prep/i.test(r.level);
       return g !== '(없음)';
     },
-    groupOf: (r) => r.level_group ?? r.level,
+    // Rise Sapling은 따로 적지 않고 Sapling에 합쳐서 보고합니다.
+    groupOf: (r) => (/^rise\s*sapling/i.test(r.level_group ?? '') ? 'Sapling' : r.level_group ?? r.level),
     groupOrder: ['Seedbed', 'Seed', 'Sprout', 'Sapling', 'Junior Master', 'Rookie', 'ivy'],
     rules: [
       '기준 주차의 온라인 수강생(학습대상자) 수, Alpha + 4.0 합산',
       'Phonics 제외',
-      'Rise Sapling 제외',
+      'Rise Sapling은 포함하되 Sapling에 합쳐서 보고',
       'ivy는 Prep만 포함 (ivy Level 1·2는 셀바스 엔진 미사용, 26 봄학기부터)',
       '레벨 그룹(Seedbed·Seed·Sprout·Sapling·Junior Master·Rookie)별로 묶어서 보고',
     ],
