@@ -3,6 +3,6 @@
  *  - 기능 추가·구조 변경: 가운데 자리 (1.1.0 → 1.2.0)
  *  - 수정·문구·작은 개선: 끝자리 (1.1.0 → 1.1.1)
  */
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.1.2';
 /** YYMMDD of that release. */
 export const APP_UPDATED = '261117';

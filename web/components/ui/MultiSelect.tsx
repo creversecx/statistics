@@ -37,11 +37,26 @@ export function MultiSelect({
     };
   }, [open]);
 
+  // 열 때 체크돼 있던 항목을 맨 위로 (체크하는 동안 목록이 움직이지 않게 연 순간 기준)
+  const [pinned, setPinned] = useState<string[]>([]);
+  useEffect(() => {
+    if (open) setPinned(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? options.filter((o) => show(o).toLowerCase().includes(s)) : options;
+    let list = options;
+    if (s) {
+      // 검색어로 시작하는 항목 먼저, 그다음 검색어를 포함하는 항목
+      const starts = options.filter((o) => show(o).toLowerCase().startsWith(s));
+      const has = options.filter((o) => !show(o).toLowerCase().startsWith(s) && show(o).toLowerCase().includes(s));
+      list = [...starts, ...has];
+    }
+    const top = new Set(pinned);
+    return [...list.filter((o) => top.has(o)), ...list.filter((o) => !top.has(o))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options, q]);
+  }, [options, q, pinned]);
 
   const summary =
     value.length === 0 ? '전체' : value.length === 1 ? show(value[0]) : `${show(value[0])} 외 ${value.length - 1}`;

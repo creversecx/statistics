@@ -51,8 +51,8 @@ export const PRESETS: { id: string; name: string; description: string; config: P
   },
   {
     id: 'p-sub-week',
-    name: '서브브랜드 주차 추이',
-    description: '최신 학기 Alpha·4.0 / Regular·Prime·TO',
+    name: '브랜드별 주차 추이',
+    description: '최신 학기 서브브랜드(April Alpha·4.0 / CD Regular·Prime·TO)별 수강률',
     config: { metric: 'enroll', rows: 'sub_brand', cols: 'week', filters: {}, latest: ['semester'], showCounts: true },
   },
   {
