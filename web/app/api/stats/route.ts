@@ -15,7 +15,8 @@ export async function POST(req: Request) {
   const cut = typeof body.cut === 'string' ? body.cut.slice(0, 60) : '';
   try {
     if (body.op === 'dims') {
-      return NextResponse.json({ values: await rpc('stat_dim_values', { metric, cut }) });
+      const brands = Array.isArray(body.brands) ? body.brands.map(String).slice(0, 10) : [];
+      return NextResponse.json({ values: await rpc('stat_dim_values', { metric, cut, brands }) });
     }
     const filters: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(body.filters ?? {})) {

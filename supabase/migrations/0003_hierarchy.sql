@@ -92,11 +92,14 @@ declare
   out jsonb := '{}'::jsonb;
   m text := coalesce(p->>'metric', 'enroll');
   c text := coalesce(p->>'cut', '');
+  -- 브랜드를 고르면 그 브랜드 데이터의 값만 (학기·서브브랜드·레벨 목록이 브랜드를 따라감)
+  b text[] := case when jsonb_typeof(p->'brands') = 'array' and jsonb_array_length(p->'brands') > 0
+                   then array(select jsonb_array_elements_text(p->'brands')) end;
 begin
   foreach d in array dims loop
     select coalesce(jsonb_agg(distinct v), '[]'::jsonb) into vals
     from stat_datasets ds, jsonb_array_elements_text(coalesce(ds.dims -> d, '[]'::jsonb)) v
-    where ds.status = 'ready' and ds.metric = m and ds.cut = c;
+    where ds.status = 'ready' and ds.metric = m and ds.cut = c and (b is null or ds.brand = any(b));
     out := out || jsonb_build_object(d, vals);
   end loop;
   select coalesce(jsonb_agg(id::text), '[]'::jsonb) into vals

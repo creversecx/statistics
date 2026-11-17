@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALERT_RATE, DIMS, DIM_LABEL, METRICS, WARN_RATE, brandName, compareLabels, subBrandName, type DimId, type Metric } from '@/lib/dims';
 import { PRESETS, TIME_DIMS, counts, dimValues, getCell, rateOf, resolveLatest, runPivot, type PivotConfig, type PivotResult } from '@/lib/pivot';
 import { MultiSelect } from '@/components/ui/MultiSelect';
+import { SUB_BRANDS } from '@/lib/levels';
 import { LineChart } from '@/components/charts/LineChart';
 import { BarList } from '@/components/charts/BarList';
 import { MAX_SERIES, num, pct } from '@/components/charts/common';
@@ -41,7 +42,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const m = METRICS[cfg.metric];
   const dsName = useCallback((id: string) => datasets.find((d) => d.id === id)?.name ?? id.slice(0, 8), [datasets]);
   const fmt = useCallback(
-    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'sub_brand' ? subBrandName(v) : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
+    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'sub_brand' ? (v === '(없음)' ? '구분 없음' : subBrandName(v)) : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
     [dsName]
   );
 
@@ -71,10 +72,13 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   }, [loadReports]);
 
   useEffect(() => {
-    dimValues(cfg.metric, cfg.cut)
-      .then(setValues)
+    // 브랜드를 고르면 나머지 목록(학기·서브브랜드·레벨…)은 그 브랜드 것만, 브랜드 목록 자체는 전부.
+    const brands = cfg.filters.brand ?? [];
+    Promise.all([dimValues(cfg.metric, cfg.cut), brands.length ? dimValues(cfg.metric, cfg.cut, brands) : null])
+      .then(([all, mine]) => setValues(mine ? { ...mine, brand: all.brand } : all))
       .catch((e) => setError(e.message));
-  }, [cfg.metric, cfg.cut]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.metric, cfg.cut, (cfg.filters.brand ?? []).join('|')]);
 
   useEffect(() => {
     if (!ready) return;
@@ -115,7 +119,33 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   }
   function setFilter(dim: DimId, v: string[]) {
     const latest = (cfg.latest ?? []).filter((l) => l !== dim);
-    edit({ filters: { ...cfg.filters, [dim]: v }, latest });
+    const filters = { ...cfg.filters, [dim]: v };
+    // 브랜드를 바꾸면 그 브랜드에 없는 서브브랜드 선택은 지웁니다.
+    if (dim === 'brand' && filters.sub_brand?.length) {
+      const allowed = new Set(subBrandOptions(v, filters.sub_brand));
+      filters.sub_brand = filters.sub_brand.filter((s) => allowed.has(s));
+    }
+    edit({ filters, latest });
+  }
+
+  /** 선택한 브랜드의 서브브랜드만 (브랜드를 안 고르면 전부). 서브브랜드가 없는 데이터(iGarten, 2024년 이전 April)는 '구분 없음'. */
+  function subBrandOptions(brands: string[], all: string[]) {
+    if (!brands.length) return all;
+    const allowed = new Set(brands.flatMap((b) => (SUB_BRANDS[b] ?? []).map((s) => s.id)));
+    const noneOk = brands.some((b) => b === 'iG' || b === 'AP');
+    return all.filter((v) => allowed.has(v) || (v === '(없음)' && noneOk));
+  }
+
+  /** 필터 드롭다운에 보일 값: 학기는 최근 학기부터, 서브브랜드는 고른 브랜드 것만. */
+  function optionsFor(d: DimId): string[] {
+    const all = values[d] ?? [];
+    if (d === 'semester') return [...all].reverse();
+    if (d === 'sub_brand') {
+      const order = Object.values(SUB_BRANDS).flat().map((s) => s.id); // Alpha · 4.0 · Regular · Prime · TO
+      const rank = (v: string) => (order.indexOf(v) < 0 ? 99 : order.indexOf(v));
+      return subBrandOptions(cfg.filters.brand ?? [], all).sort((a, b) => rank(a) - rank(b));
+    }
+    return all;
   }
   function removeFilter(dim: DimId) {
     const f = { ...cfg.filters };
@@ -394,7 +424,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
               <MultiSelect
                 key={d}
                 label={DIM_LABEL[d]}
-                options={values[d] ?? []}
+                options={optionsFor(d)}
                 value={cfg.filters[d]?.length ? cfg.filters[d]! : resolvedFilters?.[d] ?? []}
                 onChange={(v) => setFilter(d, v)}
                 format={fmt(d)}

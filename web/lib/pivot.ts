@@ -126,8 +126,8 @@ async function query(body: Record<string, unknown>): Promise<Cell[]> {
   return (data.cells ?? []).map((c: Cell) => ({ ...c, d: Number(c.d), n: Number(c.n), np: Number(c.np), da: Number(c.da), na: Number(c.na) }));
 }
 
-export async function dimValues(metric: Metric, cut?: string): Promise<Record<string, string[]>> {
-  const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'dims', metric, cut: cut ?? '' }) });
+export async function dimValues(metric: Metric, cut?: string, brands: string[] = []): Promise<Record<string, string[]>> {
+  const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'dims', metric, cut: cut ?? '', brands }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? '목록을 불러오지 못했습니다.');
   const values: Record<string, string[]> = data.values ?? {};
