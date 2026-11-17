@@ -91,9 +91,10 @@ export async function resolveLatest(cfg: PivotConfig, tick: () => void = () => {
     if (weeks.length) filters.week = [weeks[weeks.length - 1]];
   }
   if (cfg.recentMonths && !filters.month?.length) {
-    const cells = await query({ ...base, filters, rows: 'month', cols: null });
+    // 월 목록은 미리 계산된 필터 목록에서 (전체 행을 훑지 않음)
+    const vals = await dimValues(cfg.metric, cfg.cut, filters.brand ?? []);
     tick();
-    const months = cells.map((c) => c.r).filter((s) => /^\d{4}-\d{2}$/.test(s)).sort();
+    const months = (vals.month ?? []).filter((s) => /^\d{4}-\d{2}$/.test(s)).sort();
     if (months.length) filters.month = months.slice(-cfg.recentMonths);
   }
   return { ...cfg, filters };

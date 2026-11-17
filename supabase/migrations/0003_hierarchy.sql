@@ -6,6 +6,8 @@ alter table stat_facts add column if not exists sub_brand text;
 -- April 레벨 아래 트랙 (A = 봄·가을, B = 여름·겨울, 지금은 A·B 동시 운영 레벨도 있음)
 alter table stat_facts add column if not exists track text;
 create index if not exists stat_facts_bssw on stat_facts (brand, sub_brand, semester, week);
+-- 월 필터(날짜 범위)용
+create index if not exists stat_facts_metric_ws on stat_facts (metric, week_start);
 
 create or replace function stat_dim_expr(d text) returns text language plpgsql immutable as $$
 begin
@@ -49,6 +51,11 @@ begin
         w := w || format(' and coalesce(%s, ''(없음)'') = any(%L::text[])', ex, array(select jsonb_array_elements_text(v)));
       elsif k = 'week' then
         w := w || format(' and f.week = any(%L::int[])', array(select (jsonb_array_elements_text(v))::int));
+      elsif k = 'month' then
+        -- 날짜 범위로 먼저 좁혀서 (metric, week_start) 색인을 쓰고, 그 안에서 고른 달만
+        w := w || format(' and f.week_start >= %L::date and f.week_start < (%L::date + interval ''1 month'') and to_char(f.week_start, ''YYYY-MM'') = any(%L::text[])',
+          (select min(x) from jsonb_array_elements_text(v) x) || '-01', (select max(x) from jsonb_array_elements_text(v) x) || '-01',
+          array(select jsonb_array_elements_text(v)));
       else
         -- plain column comparison so the (brand, sub_brand, semester, week) index can be used
         w := w || format(' and %s = any(%L::text[])', ex, array(select jsonb_array_elements_text(v)));
