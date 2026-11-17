@@ -132,8 +132,9 @@ export function weekStartFromLabel(raw: unknown, year: number | null): string | 
 export function normBranchType(raw: unknown): string | null {
   const s = String(raw ?? '').trim();
   if (!s) return null;
-  if (/직영|^직$|direct/i.test(s)) return '직영';
-  if (/가맹|^가$|franchise/i.test(s)) return '가맹';
+  // Older sheets say Branch (직영) / Campus (가맹).
+  if (/직영|^직$|direct|^branch$/i.test(s)) return '직영';
+  if (/가맹|^가$|franchise|^campus$/i.test(s)) return '가맹';
   return null;
 }
 

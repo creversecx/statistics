@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BrandMeta, LogoMark } from '@/components/ui/Brand';
 import { StatDemo } from '@/components/ui/StatDemo';
+
+const SAVED_EMAIL_KEY = 'learning-stats:saved-email';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +16,22 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [remember, setRemember] = useState(false);
+  const [hasSaved, setHasSaved] = useState(false);
+
+  // 아이디 저장: this browser only (localStorage), the email and nothing else.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SAVED_EMAIL_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+        setHasSaved(true);
+      }
+    } catch {
+      /* storage blocked: nothing remembered */
+    }
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,6 +45,12 @@ export default function LoginPage() {
     const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (!res.ok) return setError(data.error ?? '로그인에 실패했습니다.');
+    try {
+      if (remember) localStorage.setItem(SAVED_EMAIL_KEY, email.trim());
+      else localStorage.removeItem(SAVED_EMAIL_KEY);
+    } catch {
+      /* ignore */
+    }
     router.push('/dashboard');
     router.refresh();
   }
@@ -99,7 +123,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="username"
-                  autoFocus
+                  autoFocus={!hasSaved}
                 />
               </div>
               <div>
@@ -113,8 +137,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
+                  autoFocus={hasSaved}
                 />
               </div>
+              <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-white/75">
+                <input type="checkbox" className="h-4 w-4 accent-sky-400" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                아이디 저장
+              </label>
               {error && <p className="text-sm text-rose-300">{error}</p>}
               <button type="submit" disabled={loading} className="btn-primary w-full !py-3.5 shadow-[0_0_40px_-8px_rgba(56,189,248,0.6)]">
                 {loading ? '확인 중…' : '로그인'}

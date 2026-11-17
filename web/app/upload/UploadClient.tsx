@@ -695,7 +695,7 @@ export function UploadClient() {
           </div>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
             <p className="text-xs text-white/60">
-              {!k.brand ? '브랜드를 고르세요.' : !has('denom') || !has('numer') ? '분모·분자 열을 정하세요.' : '올리면 바로 분석 화면에 반영됩니다.'}
+              {!k.brand ? '브랜드를 고르세요.' : (!has('denom') && !has('rest')) || !has('numer') ? '분모(또는 나머지)·분자 열을 정하세요.' : '올리면 바로 분석 화면에 반영됩니다.'}
             </p>
             <button onClick={upload} disabled={!canUpload} className="btn-primary disabled:opacity-40">
               {picked.length > 1 ? `시트 ${picked.length}개 올리기` : '올리기'}

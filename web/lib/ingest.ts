@@ -44,12 +44,14 @@ export type FieldId =
   | 'component'
   | 'denom'
   | 'numer'
+  | 'rest'
   | 'rate';
 
 export const FIELDS: { id: FieldId; label: string; dim?: boolean }[] = [
   { id: 'ignore', label: '— 사용 안 함' },
   { id: 'denom', label: '분모 (현원생 / 학습해야 할 건수)' },
   { id: 'numer', label: '분자 (수강생 / 완료 건수)' },
+  { id: 'rest', label: '나머지 (미수강생 / 미완료 건수) — 분모 = 분자 + 나머지' },
   { id: 'rate', label: '비율 (참고용, 저장 안 함)' },
   { id: 'brand', label: '브랜드', dim: true },
   { id: 'semester', label: '학기', dim: true },
@@ -69,7 +71,7 @@ export const FIELDS: { id: FieldId; label: string; dim?: boolean }[] = [
 
 /** Header text (lowercase, spaces and punctuation removed) → field. First match wins, most specific first. */
 const ALIASES: [FieldId, string[]][] = [
-  ['ignore', ['미수강', '미완료', '미학습']],
+  ['rest', ['미수강', '미완료', '미학습']],
   ['numer', ['학습완료된건수', '학습완료건수', '완료건수', 'complete_total', 'completetotal', '온라인수강생', '수강생수', '수강생', '학습대상자수', '학습대상자', 'elearning학생수', '완료학생수', 'numer']],
   ['denom', ['학습해야할건수', '총학습건수', '학습건수', '현원생수', '현원생', '재원생수', '재원생', '대상건수', 'total', 'denom']],
   ['rate', ['수강률', '수강율', '완료율', '학습완료율', 'rate', '학습률']],
@@ -154,7 +156,7 @@ function mergeBlocksForPivot(row: Cell[], blocks: Block[]): Block[] {
   let cur = { ...blocks[0] };
   blocks.slice(1).forEach((b, i) => {
     // A run of label columns (Week, 구분 …) left of the counts belongs to the counts' table.
-    if (gaps[i] <= 4 && !hasField(row, cur, 'denom')) {
+    if (gaps[i] <= 4 && !hasCounts(row, cur)) {
       cur = { start: cur.start, end: b.end, score: cur.score + b.score, label: `${cur.label} · ${b.label}` };
     } else {
       out.push(cur);
@@ -164,6 +166,8 @@ function mergeBlocksForPivot(row: Cell[], blocks: Block[]): Block[] {
   out.push(cur);
   return out;
 }
+
+const hasCounts = (row: Cell[], b: Block) => hasField(row, b, 'denom') || hasField(row, b, 'numer');
 
 function hasField(row: Cell[], b: Block, f: FieldId) {
   for (let i = b.start; i <= b.end; i++) if (fieldFromHeader(row[i]) === f) return true;
@@ -202,7 +206,7 @@ export function detectLayout(grid: Grid, prefer?: { headerRow?: number; block?: 
   let block = prefer?.block ?? -1;
   if (block < 0 || block >= blocks.length) {
     // The leftmost table that has counts: side tables to the right are usually summaries of it.
-    block = Math.max(0, blocks.findIndex((b) => hasField(row, b, 'denom')));
+    block = Math.max(0, blocks.findIndex((b) => hasCounts(row, b)));
   }
   const { start, end } = blocks[block];
   const body = grid.slice(headerRow + 1, headerRow + 301);
@@ -235,7 +239,7 @@ export function detectLayout(grid: Grid, prefer?: { headerRow?: number; block?: 
   }
   // Group labels shown only on the first row of each group → fill them down.
   const dimCols = columns.filter((c) => FIELDS.find((f) => f.id === c.field)?.dim);
-  const denomCol = columns.find((c) => c.field === 'denom');
+  const denomCol = columns.find((c) => c.field === 'denom') ?? columns.find((c) => c.field === 'numer');
   let blanks = 0;
   let counted = 0;
   if (denomCol) {
@@ -355,7 +359,9 @@ export function extract(
   const col = (f: FieldId) => layout.columns.find((c) => c.field === f)?.index;
   const denomI = col('denom');
   const numerI = col('numer');
-  if (denomI === undefined || numerI === undefined) {
+  // Older sheets carry 수강생 + 미수강생 instead of 현원생: the denominator is their sum.
+  const restI = denomI === undefined ? col('rest') : undefined;
+  if ((denomI === undefined && restI === undefined) || numerI === undefined) {
     return { rows: [], read: 0, used: 0, skipped: { total: 0, noNumber: 0, noDim: 0 }, warnings: ['분모와 분자 열을 정해 주세요.'], map };
   }
   const dimCols = layout.columns.filter((c) => FIELDS.find((f) => f.id === c.field)?.dim);
@@ -391,8 +397,14 @@ export function extract(
       }
       raw[c.field] = v;
     }
-    const d = row[denomI];
     const n = row[numerI];
+    const rest = restI !== undefined ? row[restI] : null;
+    const d: Cell =
+      denomI !== undefined
+        ? row[denomI]
+        : isNum(n) || isNum(rest)
+          ? (isNum(n) ? (n as number) : 0) + (isNum(rest) ? (rest as number) : 0)
+          : null;
     const hasNumbers = isNum(d) || isNum(n);
     if (!hasNumbers && !anyDim) continue; // blank line
     read++;

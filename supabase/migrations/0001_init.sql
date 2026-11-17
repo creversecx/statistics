@@ -361,15 +361,15 @@ begin
   from stat_branches b
   where f.dataset_id = ds_id and f.brand = b.brand and f.branch = any(b.aliases);
 
-  update stat_facts f set
-    branch_type = coalesce(f.branch_type, b.branch_type),
-    alpha = coalesce(f.alpha, b.alpha)
+  -- 직/가맹만 채웁니다. 알파 여부는 학기마다 바뀌어서(26봄 알파 전환 등) 표에 있는 값만 씁니다.
+  update stat_facts f set branch_type = b.branch_type
   from stat_branches b
   where f.dataset_id = ds_id and f.brand = b.brand and f.branch = b.name
-    and (f.branch_type is null or f.alpha is null);
+    and f.branch_type is null and b.branch_type is not null;
 
   insert into stat_branches (brand, name, branch_type, alpha)
-  select brand, branch, max(branch_type), max(alpha)
+  select brand, branch, max(branch_type),
+    (array_agg(alpha order by sem_order desc nulls last, week desc nulls last) filter (where alpha is not null))[1]
   from stat_facts where dataset_id = ds_id and branch is not null
   group by brand, branch
   on conflict (brand, name) do update set
@@ -485,13 +485,10 @@ begin
   from stat_branches m
   where f.brand = m.brand and f.branch = any(m.aliases);
   get diagnostics a = row_count;
-  update stat_facts f set
-    branch_type = coalesce(m.branch_type, f.branch_type),
-    alpha = coalesce(m.alpha, f.alpha)
+  update stat_facts f set branch_type = m.branch_type
   from stat_branches m
-  where f.brand = m.brand and f.branch = m.name
-    and (coalesce(f.branch_type, '') <> coalesce(m.branch_type, f.branch_type, '')
-      or coalesce(f.alpha, '') <> coalesce(m.alpha, f.alpha, ''));
+  where f.brand = m.brand and f.branch = m.name and m.branch_type is not null
+    and coalesce(f.branch_type, '') <> m.branch_type;
   get diagnostics b = row_count;
   if a + b > 0 then
     perform stat_dataset_dims(jsonb_build_object('id', d.id)) from stat_datasets d where d.status = 'ready';

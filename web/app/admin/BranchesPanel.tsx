@@ -61,7 +61,7 @@ export function BranchesPanel() {
 
   async function apply() {
     const r = await post({ op: 'apply' });
-    if (r) setNotice(`기존 데이터에 반영했습니다 · 이름 바꿈 ${r.renamed}행, 직/가맹·알파 갱신 ${r.updated}행`);
+    if (r) setNotice(`기존 데이터에 반영했습니다 · 이름 바꿈 ${r.renamed}행, 직/가맹 갱신 ${r.updated}행`);
   }
 
   async function remove(b: Branch) {
