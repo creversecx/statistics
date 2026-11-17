@@ -114,7 +114,7 @@ npm run set-password -- kykim@creverse.com   # 로컬(또는 .env.local의 Supab
 2. **Supabase**: 새 프로젝트 → SQL Editor에서 `supabase/migrations/`의 파일을 번호 순서대로 실행 (0001 → 0002). 다시 실행해도 안전합니다.
    - 다른 사내 서비스도 같은 프로젝트로 옮길 계획이면 하나의 프로젝트에 접두사(`stat_`, QC는 기존 테이블명)로 나눠 두면 됩니다.
 3. **Resend**: 발신 도메인 인증 후 API 키 발급.
-4. **Vercel**: 저장소 import, Root Directory = `web`. 환경 변수는 `web/.env.example` 기준
+4. **Vercel**: 저장소 import, Root Directory = `web`. 서버 함수 리전은 DB와 같은 도쿄(`hnd1`, `web/vercel.json`) — 기본값(미국 iad1)이면 요청마다 태평양을 여러 번 건너 느려집니다. 환경 변수는 `web/.env.example` 기준
    (`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL`, `SIGNUP_ALLOWED_DOMAINS`).
 5. 첫 로그인: 두 슈퍼어드민은 로그인 화면 **비밀번호 찾기**로 메일을 받아 비밀번호를 정합니다 (메일 연결 전이면 `npm run set-password`).
 
