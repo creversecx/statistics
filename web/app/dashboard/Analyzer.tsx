@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALERT_RATE, DIMS, DIM_LABEL, METRICS, WARN_RATE, brandName, compareLabels, subBrandName, type DimId, type Metric } from '@/lib/dims';
-import { PRESETS, TIME_DIMS, counts, dimValues, getCell, rateOf, resolveLatest, runPivot, type PivotConfig, type PivotResult } from '@/lib/pivot';
+import { DEFAULTS, TIME_DIMS, autoTitle, counts, dimValues, getCell, pivotSteps, rateOf, resolveLatest, runPivot, type PivotConfig, type PivotResult } from '@/lib/pivot';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { SUB_BRANDS } from '@/lib/levels';
 import { LineChart } from '@/components/charts/LineChart';
@@ -13,7 +13,7 @@ import { MAX_SERIES, num, pct } from '@/components/charts/common';
 type Report = { id: string; name: string; description: string; config: PivotConfig; created_by: string };
 type DatasetLite = { id: string; name: string };
 
-const DEFAULT: PivotConfig = PRESETS[1].config;
+const DEFAULT: PivotConfig = DEFAULTS.enroll;
 const PINNED_FILTERS: DimId[] = ['brand', 'sub_brand', 'semester'];
 
 function encode(cfg: PivotConfig) {
@@ -22,11 +22,9 @@ function encode(cfg: PivotConfig) {
 
 export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const [cfg, setCfg] = useState<PivotConfig>(DEFAULT);
-  const [active, setActive] = useState<{ kind: 'preset' | 'report' | 'custom'; id?: string; name: string }>({
-    kind: 'preset',
-    id: PRESETS[1].id,
-    name: PRESETS[1].name,
-  });
+  // 저장한 보고서를 열었을 때만 이름이 붙고, 그 밖에는 행·열로 제목을 만듭니다.
+  const [active, setActive] = useState<{ kind: 'report' | 'custom'; id?: string; name?: string }>({ kind: 'custom' });
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [values, setValues] = useState<Record<string, string[]>>({});
   const [result, setResult] = useState<PivotResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,7 +61,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     if (q) {
       try {
         setCfg(JSON.parse(decodeURIComponent(q)));
-        setActive({ kind: 'custom', name: '공유된 분석' });
+        setActive({ kind: 'custom' });
       } catch {
         /* ignore */
       }
@@ -84,6 +82,13 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     if (!ready) return;
     const id = ++run.current;
     setLoading(true);
+    const total = pivotSteps(cfg);
+    let done = 0;
+    setProgress({ done: 0, total });
+    const tick = () => {
+      done++;
+      if (id === run.current) setProgress({ done, total });
+    };
     setError(null);
     setResolvedFilters(null);
     // A different shape (지표·행·열) makes the old numbers misleading: drop them while the new ones load.
@@ -95,8 +100,8 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     window.history.replaceState(null, '', `?q=${encode(cfg)}`);
     (async () => {
       try {
-        const resolved = await resolveLatest(cfg);
-        const res = await runPivot(resolved);
+        const resolved = await resolveLatest(cfg, tick);
+        const res = await runPivot(resolved, tick);
         if (id !== run.current) return;
         if (resolved !== cfg && JSON.stringify(resolved.filters) !== JSON.stringify(cfg.filters)) {
           // Show what "최신" turned into, but keep it as "latest" in the saved setup.
@@ -106,7 +111,10 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
       } catch (e) {
         if (id === run.current) setError(e instanceof Error ? e.message : String(e));
       } finally {
-        if (id === run.current) setLoading(false);
+        if (id === run.current) {
+          setLoading(false);
+          setProgress(null);
+        }
       }
     })();
   }, [cfg, ready]);
@@ -115,11 +123,15 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   // ---- editing ------------------------------------------------------------
   function edit(patch: Partial<PivotConfig>) {
     setCfg((c) => ({ ...c, ...patch }));
-    setActive((a) => (a.kind === 'custom' ? a : { kind: 'custom', name: `${a.name} (수정)` }));
+    setActive((a) => (a.kind === 'custom' ? a : { kind: 'custom' }));
   }
   function setFilter(dim: DimId, v: string[]) {
     const latest = (cfg.latest ?? []).filter((l) => l !== dim);
     const filters = { ...cfg.filters, [dim]: v };
+    if (dim === 'month') {
+      edit({ filters, latest, recentMonths: undefined });
+      return;
+    }
     // 브랜드를 바꾸면 그 브랜드에 없는 서브브랜드 선택은 지웁니다.
     if (dim === 'brand' && filters.sub_brand?.length) {
       const allowed = new Set(subBrandOptions(v, filters.sub_brand));
@@ -153,10 +165,10 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     edit({ filters: f, latest: (cfg.latest ?? []).filter((l) => l !== dim) });
   }
   function switchMetric(k: Metric) {
-    const first = PRESETS.find((p) => p.config.metric === k);
-    if (first) open('preset', first.id, first.name, first.config);
+    setCfg({ ...DEFAULTS[k], filters: {} });
+    setActive({ kind: 'custom' });
   }
-  function open(kind: 'preset' | 'report', id: string, name: string, config: PivotConfig) {
+  function open(kind: 'report', id: string, name: string, config: PivotConfig) {
     setCfg({ ...config, filters: { ...config.filters } });
     setActive({ kind, id, name });
   }
@@ -186,7 +198,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     const rl = cfg.rows ? DIM_LABEL[cfg.rows] : '구분';
     const cols = cfg.cols ? result.colKeys : [];
     const aoa: (string | number | null)[][] = [];
-    aoa.push([`${m.label} · ${active.name}`]);
+    aoa.push([`${m.label} · ${title}`]);
     aoa.push([filterSummary()]);
     aoa.push([]);
     const head = [rl, ...cols.map(fmt(cfg.cols)), '합계'];
@@ -213,7 +225,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, m.short);
-    XLSX.writeFile(wb, `${active.name.replace(/[\\/:*?"<>|]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `${title.replace(/[\\/:*?"<>|]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
   const round = (v: number | null) => (v === null ? null : Math.round(v * 10000) / 10000);
 
@@ -236,7 +248,11 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const weeks = (values.week ?? []).filter((w) => w !== '(없음)').map(Number).sort((a, b) => a - b);
   const noData = Object.keys(values).length > 0 && (values.brand ?? []).length === 0;
 
+
   const timeCols = !!cfg.cols && TIME_DIMS.includes(cfg.cols);
+  const timeColsDim = timeCols;
+  // 시간 축(주차·월·학기) 차트에서는 날짜를 모르는 '(없음)' 칸을 그리지 않습니다 (표에는 남김).
+  const chartCols = useMemo(() => (result ? result.colKeys.filter((c) => !(timeColsDim && c === '(없음)')) : []), [result, timeColsDim]);
   const chart = useMemo(() => {
     if (!result) return null;
     if (timeCols) {
@@ -247,8 +263,8 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
         hidden: cfg.rows ? Math.max(0, result.rowKeys.length - MAX_SERIES) : 0,
         series: ordered.map((r) => ({
           name: cfg.rows ? fmt(cfg.rows)(r) : '전체',
-          values: result.colKeys.map((c) => rateOf(cfg.rows ? getCell(result, r, c) : result.colTotal.get(c) ?? getCell(result, r, c)) ?? null),
-          detail: result.colKeys.map((c) => {
+          values: chartCols.map((c) => rateOf(cfg.rows ? getCell(result, r, c) : result.colTotal.get(c) ?? getCell(result, r, c)) ?? null),
+          detail: chartCols.map((c) => {
             const k = counts(getCell(result, r, c), cfg.metric);
             return k.d === null ? null : `${num(k.n)}/${num(k.d)}`;
           }),
@@ -265,7 +281,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
         return { label: cfg.rows ? fmt(cfg.rows)(r) : '전체', rate: rateOf(c), detail: `${num(k.n)} / ${num(k.d)}` };
       }),
     };
-  }, [result, cfg.rows, cfg.metric, timeCols, fmt]);
+  }, [result, cfg.rows, cfg.metric, timeCols, fmt, chartCols]);
 
   const totalCounts = counts(result?.total, cfg.metric);
   const below = useMemo(() => {
@@ -284,7 +300,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const mine = (r: Report) => r.created_by === me.email || me.role === 'super_admin';
 
   // ---- render -------------------------------------------------------------
-  const presets = PRESETS.filter((p) => p.config.metric === cfg.metric);
+  const title = active.kind === 'report' && active.name ? active.name : autoTitle(cfg, (d) => DIM_LABEL[d], m.rate);
   const cuts = (values._cuts ?? []) as string[];
 
   // ---- render -------------------------------------------------------------
@@ -326,39 +342,17 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
           <button onClick={exportXlsx} disabled={!result} className="btn-secondary !px-4 !py-2 disabled:opacity-40">
             엑셀로 받기
           </button>
-          <button onClick={() => setSaving({ name: active.kind === 'custom' ? '' : active.name, description: '' })} className="btn-primary !px-4 !py-2">
+          <button onClick={() => setSaving({ name: title, description: '' })} className="btn-primary !px-4 !py-2">
             보고서로 저장
           </button>
         </div>
       </div>
 
-      {/* 이 지표의 기본 보기 */}
-      <nav className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line px-1 [scrollbar-width:thin]" aria-label="보기">
-        {presets.map((p) => {
-          const on = active.kind === 'preset' && active.id === p.id;
-          return (
-            <button
-              key={p.id}
-              onClick={() => open('preset', p.id, p.name, p.config)}
-              title={p.description}
-              aria-current={on ? 'page' : undefined}
-              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm transition ${on ? 'border-accent-cyan font-semibold text-white' : 'border-transparent text-white/65 hover:text-white'}`}
-            >
-              {p.name}
-            </button>
-          );
-        })}
-        {active.kind !== 'preset' && (
-          <span className="-mb-px shrink-0 whitespace-nowrap border-b-2 border-accent-pink px-3.5 py-2.5 text-sm font-semibold text-white">{active.name}</span>
-        )}
-      </nav>
 
       <div>
-        <h1 className="text-3xl font-extrabold leading-tight">{active.name}</h1>
-        <p className="mt-1 text-sm text-white/65">
-          {active.kind === 'preset' ? `${PRESETS.find((p) => p.id === active.id)?.description ?? ''} · ` : ''}
-          {m.hint}
-        </p>
+        {active.kind === 'report' && <p className="text-xs font-semibold tracking-widest text-white/55">저장한 보고서</p>}
+        <h1 className="text-3xl font-extrabold leading-tight">{title}</h1>
+        <p className="mt-1 text-sm text-white/65">{m.hint}</p>
       </div>
 
         {saving && (
@@ -394,7 +388,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
 
         {/* 필터 · 배치 */}
         <div className="card relative z-30 space-y-4 !p-5">
-          {((cfg.latest ?? []).length > 0 || cuts.length > 0) && (
+          {((cfg.latest ?? []).length > 0 || cuts.length > 0 || !!cfg.recentMonths) && (
             <div className="flex flex-wrap items-center gap-3">
               {cuts.length > 0 && (
                 <div className="flex items-center gap-2 text-sm">
@@ -415,6 +409,14 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
               )}
               {(cfg.latest ?? []).length > 0 && (
                 <span className="tag-pill">{(cfg.latest ?? []).map((l) => DIM_LABEL[l]).join('·')}은 항상 최신 값</span>
+              )}
+              {!!cfg.recentMonths && (
+                <span className="tag-pill">
+                  최근 {cfg.recentMonths}개월
+                  <button className="ml-1 text-white/60 hover:text-white" onClick={() => edit({ recentMonths: undefined, filters: { ...cfg.filters, month: [] } })} aria-label="최근 개월 제한 풀기">
+                    ×
+                  </button>
+                </span>
               )}
             </div>
           )}
@@ -525,6 +527,8 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
           </div>
         </div>
 
+        <LoadBar progress={loading ? progress : null} />
+
         {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/5 px-4 py-2.5 text-sm text-rose-300">{error}</p>}
 
         {noData ? (
@@ -556,7 +560,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
               {chart?.kind === 'line' && chart.series.length > 0 && (
                 <>
                   <LineChart
-                    categories={result!.colKeys}
+                    categories={chartCols}
                     series={chart.series}
                     reference={{ value: WARN_RATE, label: `${WARN_RATE * 100}%` }}
                     xLabel={fmt(cfg.cols)}
@@ -750,6 +754,43 @@ function ReportsMenu({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 불러오는 동안의 진행 막대. 집계 요청 몇 개 중 몇 개가 끝났는지 %로 보여 주고,
+ * 막대 위로 빛이 계속 지나가서 멈춘 것처럼 보이지 않게 합니다. 화면을 내려도 위에 붙어 있습니다.
+ * 자리는 항상 차지해서, 나타났다 사라질 때 아래 내용이 들썩이지 않습니다.
+ */
+function LoadBar({ progress }: { progress: { done: number; total: number } | null }) {
+  const on = !!progress;
+  const pct = progress ? Math.round((progress.done / progress.total) * 100) : 100;
+  // 첫 응답 전에도 조금 차 있게 (0%에서 멈춘 듯 보이지 않도록)
+  const width = progress ? Math.max(8, Math.min(100, pct + Math.round(40 / progress.total))) : 100;
+  return (
+    <div className="sticky top-[64px] z-20 !mt-0 h-0">
+    <div
+      className={`absolute inset-x-0 top-2 transition-opacity duration-300 ${on ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+      role="progressbar"
+      aria-label="데이터 불러오는 중"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={on ? pct : undefined}
+      aria-hidden={!on}
+    >
+      <div className="rounded-xl border border-line bg-base-900/95 px-4 py-2.5 shadow-lg backdrop-blur">
+        <div className="mb-1.5 flex items-center justify-between text-xs">
+          <span className="text-white/80">
+            데이터 불러오는 중… {progress ? `${progress.done}/${progress.total}단계` : ''}
+          </span>
+          <span className="font-semibold tabular-nums text-accent-cyan">{pct}%</span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="load-bar h-full rounded-full bg-accent-gradient transition-[width] duration-500 ease-out" style={{ width: `${width}%` }} />
+        </div>
+      </div>
+    </div>
     </div>
   );
 }

@@ -9,6 +9,8 @@ export type PivotConfig = {
   week_to?: number | null;
   /** Filters to resolve to the newest value each time the view opens (e.g. 최신 학기·주차). */
   latest?: ('semester' | 'week')[];
+  /** 최근 N개월만 (열 때마다 데이터에 있는 마지막 달 기준으로 다시 잡음) */
+  recentMonths?: number;
   sort?: 'label' | 'rate_desc' | 'rate_asc' | 'denom_desc';
   /** A supplementary table (e.g. April 레벨별 보조표) instead of the base one. */
   cut?: string;
@@ -29,93 +31,29 @@ export type PivotResult = {
 
 export const TIME_DIMS: DimId[] = ['week', 'month', 'semester'];
 
-/** The views the teams have been building by hand, as starting points. */
-export const PRESETS: { id: string; name: string; description: string; config: PivotConfig }[] = [
-  {
-    id: 'p-branch-week',
-    name: '학원별 수강률 (최신 주)',
-    description: '주간 보고 · 80%/60% 미만 캠퍼스',
-    config: { metric: 'enroll', rows: 'branch', cols: null, filters: {}, latest: ['semester', 'week'], sort: 'rate_asc', showCounts: true },
-  },
-  {
-    id: 'p-sem-week',
-    name: '학기별 주차 추이',
-    description: '학기 × 주차 수강률 비교',
-    config: { metric: 'enroll', rows: 'semester', cols: 'week', filters: {} },
-  },
-  {
-    id: 'p-type-week',
-    name: '직/가맹 주차 추이',
-    description: '최신 학기 직영·가맹 수강률',
-    config: { metric: 'enroll', rows: 'branch_type', cols: 'week', filters: {}, latest: ['semester'], showCounts: true },
-  },
-  {
-    id: 'p-sub-week',
-    name: '브랜드별 주차 추이',
-    description: '최신 학기 서브브랜드(April Alpha·4.0 / CD Regular·Prime·TO)별 수강률',
-    config: { metric: 'enroll', rows: 'sub_brand', cols: 'week', filters: {}, latest: ['semester'], showCounts: true },
-  },
-  {
-    id: 'p-level-week',
-    name: '레벨별 주차 추이',
-    description: '최신 학기 레벨별 수강률 (브랜드·서브브랜드를 골라 보세요)',
-    config: { metric: 'enroll', rows: 'level', cols: 'week', filters: { brand: ['AP'] }, latest: ['semester'] },
-  },
-  {
-    id: 'p-brand-month',
-    name: '브랜드별 월간 수강률',
-    description: '월별 현원생·수강생·수강률',
-    config: { metric: 'enroll', rows: 'brand', cols: 'month', filters: {}, showCounts: true },
-  },
-  {
-    id: 'p-brand-sem',
-    name: '브랜드별 학기 추이',
-    description: '학기 평균 수강률',
-    config: { metric: 'enroll', rows: 'brand', cols: 'semester', filters: {}, showCounts: true },
-  },
-  {
-    id: 'p-c-component-low',
-    name: '보완할 학습 (완료율 낮은 순)',
-    description: '최신 학기 콘텐츠·학습유형별 완료율, 낮은 것부터',
-    config: { metric: 'complete', rows: 'component', cols: null, filters: {}, latest: ['semester'], sort: 'rate_asc', showCounts: true },
-  },
-  {
-    id: 'p-c-level-component',
-    name: '레벨 × 학습 유형',
-    description: '최신 학기 어느 레벨의 어느 학습이 비는지',
-    config: { metric: 'complete', rows: 'level', cols: 'component', filters: {}, latest: ['semester'] },
-  },
-  {
-    id: 'p-c-branch-low',
-    name: '학원별 완료율 (낮은 순)',
-    description: '최신 학기 완료율이 낮은 학원',
-    config: { metric: 'complete', rows: 'branch', cols: null, filters: {}, latest: ['semester'], sort: 'rate_asc', showCounts: true },
-  },
-  {
-    id: 'p-c-type-sem',
-    name: '직/가맹 학습 완료율 추이',
-    description: '학기별 완료율 (Vena Talk 보고 형식)',
-    config: { metric: 'complete', rows: 'branch_type', cols: 'semester', filters: {} },
-  },
-  {
-    id: 'p-c-level-sem',
-    name: '레벨별 학습 완료율 추이',
-    description: '학기별 레벨 완료율',
-    config: { metric: 'complete', rows: 'level', cols: 'semester', filters: {} },
-  },
-  {
-    id: 'p-c-program-level',
-    name: '프로그램·레벨 완료율',
-    description: '최신 학기 레벨별 완료율',
-    config: { metric: 'complete', rows: 'level', cols: null, filters: {}, latest: ['semester'], sort: 'label', showCounts: true },
-  },
-  {
-    id: 'p-c-content-week',
-    name: '콘텐츠별 주차 완료율',
-    description: '최신 학기 콘텐츠·주차',
-    config: { metric: 'complete', rows: 'content', cols: 'week', filters: {}, latest: ['semester'] },
-  },
-];
+/** 지표를 처음 열 때 보이는 화면. 수강률 = 브랜드별 월간, 완료율 = 콘텐츠별 학기. */
+export const DEFAULTS: Record<Metric, PivotConfig> = {
+  enroll: { metric: 'enroll', rows: 'brand', cols: 'month', filters: {}, recentMonths: 12, showCounts: true },
+  complete: { metric: 'complete', rows: 'content', cols: 'semester', filters: {}, showCounts: true },
+};
+
+/** 행·열로 만든 화면 제목: "브랜드별 월간 수강률", "콘텐츠별 학기별 완료율", "학원 × 레벨 수강률" */
+export function autoTitle(cfg: PivotConfig, dimLabel: (d: DimId) => string, rate: string): string {
+  const r = cfg.rows ? `${dimLabel(cfg.rows)}별` : '전체';
+  const c = cfg.cols === 'month' ? '월간' : cfg.cols === 'week' ? '주차별' : cfg.cols === 'semester' ? '학기별' : cfg.cols ? `× ${dimLabel(cfg.cols)}` : '';
+  return [r, c, rate].filter(Boolean).join(' ');
+}
+
+/** How many requests a run makes — for the progress bar. */
+export function pivotSteps(cfg: PivotConfig): number {
+  let n = 2; // cells + total
+  if (cfg.cols) n++;
+  if (cfg.rows && cfg.cols) n++;
+  if (cfg.latest?.includes('semester') && !cfg.filters.semester?.length) n++;
+  if (cfg.latest?.includes('week') && !cfg.filters.week?.length) n++;
+  if (cfg.recentMonths && !cfg.filters.month?.length) n++;
+  return n;
+}
 
 const key = (r: string, c: string) => `${r}\u0001${c}`;
 
@@ -136,30 +74,39 @@ export async function dimValues(metric: Metric, cut?: string, brands: string[] =
 }
 
 /** Fills in "latest" filters: the newest semester present (within the other filters), then its newest week. */
-export async function resolveLatest(cfg: PivotConfig): Promise<PivotConfig> {
-  if (!cfg.latest?.length) return cfg;
+export async function resolveLatest(cfg: PivotConfig, tick: () => void = () => {}): Promise<PivotConfig> {
+  if (!cfg.latest?.length && !cfg.recentMonths) return cfg;
   const filters = { ...cfg.filters };
   const base = { metric: cfg.metric, cut: cfg.cut ?? '', week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
-  if (cfg.latest.includes('semester') && !filters.semester?.length) {
+  if (cfg.latest?.includes('semester') && !filters.semester?.length) {
     const cells = await query({ ...base, filters, rows: 'semester', cols: null });
+    tick();
     const sems = cells.map((c) => c.r).filter((s) => s !== '(없음)').sort((a, b) => compareLabels(a, b, 'semester'));
     if (sems.length) filters.semester = [sems[sems.length - 1]];
   }
-  if (cfg.latest.includes('week') && !filters.week?.length) {
+  if (cfg.latest?.includes('week') && !filters.week?.length) {
     const cells = await query({ ...base, filters, rows: 'week', cols: null });
+    tick();
     const weeks = cells.map((c) => c.r).filter((s) => s !== '(없음)').sort((a, b) => compareLabels(a, b));
     if (weeks.length) filters.week = [weeks[weeks.length - 1]];
+  }
+  if (cfg.recentMonths && !filters.month?.length) {
+    const cells = await query({ ...base, filters, rows: 'month', cols: null });
+    tick();
+    const months = cells.map((c) => c.r).filter((s) => /^\d{4}-\d{2}$/.test(s)).sort();
+    if (months.length) filters.month = months.slice(-cfg.recentMonths);
   }
   return { ...cfg, filters };
 }
 
-export async function runPivot(cfg: PivotConfig): Promise<PivotResult> {
+export async function runPivot(cfg: PivotConfig, tick: () => void = () => {}): Promise<PivotResult> {
   const base = { metric: cfg.metric, cut: cfg.cut ?? '', filters: cfg.filters, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
+  const t = <T,>(p: Promise<T>) => p.then((v) => (tick(), v));
   const [cells, rowsOnly, colsOnly, total] = await Promise.all([
-    query({ ...base, rows: cfg.rows, cols: cfg.cols }),
-    cfg.cols ? query({ ...base, rows: cfg.rows, cols: null }) : Promise.resolve(null),
-    cfg.rows && cfg.cols ? query({ ...base, rows: null, cols: cfg.cols }) : Promise.resolve(null),
-    query({ ...base, rows: null, cols: null }),
+    t(query({ ...base, rows: cfg.rows, cols: cfg.cols })),
+    cfg.cols ? t(query({ ...base, rows: cfg.rows, cols: null })) : Promise.resolve(null),
+    cfg.rows && cfg.cols ? t(query({ ...base, rows: null, cols: cfg.cols })) : Promise.resolve(null),
+    t(query({ ...base, rows: null, cols: null })),
   ]);
   const cell = new Map<string, Cell>();
   const rowSet = new Set<string>();

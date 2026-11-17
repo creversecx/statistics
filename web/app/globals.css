@@ -194,7 +194,26 @@ select optgroup {
 }
 .demo-scan { animation: demo-scan 1.1s cubic-bezier(0.4, 0, 0.3, 1) both; }
 
+/* 불러오는 중 막대: 빛이 계속 지나가서 멈춘 것처럼 보이지 않게 */
+@keyframes load-shine {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.load-bar {
+  position: relative;
+  overflow: hidden;
+}
+.load-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: load-shine 1.1s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .load-bar::after { animation: none; display: none; }
   .badge-pop, .badge-pop::after, .step-active, .step-flow, .rise-in, .glow-ring,
   .word-rise, .scan-pass::after, .mark-draw, .demo-scan { animation: none !important; }
   .scan-pass::after { display: none; }
