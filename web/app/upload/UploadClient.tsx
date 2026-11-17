@@ -584,6 +584,7 @@ export function UploadClient() {
                     {s.name}
                   </option>
                 ))}
+                {k.brand === 'CD' && <option value="TO">일반관 · ESL+EFL (TO·The Open 수업)</option>}
               </select>
             </Field>
           )}

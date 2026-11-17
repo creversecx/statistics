@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALERT_RATE, DIMS, DIM_LABEL, METRICS, WARN_RATE, brandName, compareLabels, subBrandName, type DimId, type Metric } from '@/lib/dims';
-import { DEFAULTS, TIME_DIMS, autoTitle, counts, dimValues, getCell, pivotSteps, rateOf, resolveLatest, runPivot, type PivotConfig, type PivotResult } from '@/lib/pivot';
+import { DEFAULTS, TIME_DIMS, autoTitle, counts, dimCoverage, dimValues, getCell, pivotSteps, rateOf, resolveLatest, runPivot, type Coverage, type PivotConfig, type PivotResult } from '@/lib/pivot';
 import { MultiSelect } from '@/components/ui/MultiSelect';
-import { SUB_BRANDS } from '@/lib/levels';
+import { COURSE_TYPES, SUB_BRANDS } from '@/lib/levels';
 import { LineChart } from '@/components/charts/LineChart';
 import { BarList } from '@/components/charts/BarList';
 import { MAX_SERIES, num, pct } from '@/components/charts/common';
@@ -14,7 +14,21 @@ type Report = { id: string; name: string; description: string; config: PivotConf
 type DatasetLite = { id: string; name: string };
 
 const DEFAULT: PivotConfig = DEFAULTS.enroll;
-const PINNED_FILTERS: DimId[] = ['brand', 'sub_brand', 'semester'];
+const PINNED_FILTERS: DimId[] = ['brand', 'sub_brand', 'course_type', 'semester'];
+/** 일부 자료에만 있는 세부 항목 — 표에 '(없음)'이 나오면 어느 기간에 있는지 안내합니다. */
+const DETAIL_DIMS: DimId[] = ['branch_type', 'branch', 'program', 'level_group', 'level', 'track', 'course_type', 'grade', 'grade_group', 'class_name', 'content', 'component'];
+
+/** [5,6,7,9] → "5~7·9주차" */
+function weekRanges(weeks: number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < weeks.length; i++) {
+    let j = i;
+    while (j + 1 < weeks.length && weeks[j + 1] === weeks[j] + 1) j++;
+    out.push(j > i ? `${weeks[i]}~${weeks[j]}` : `${weeks[i]}`);
+    i = j;
+  }
+  return `${out.join('·')}주차`;
+}
 
 function encode(cfg: PivotConfig) {
   return encodeURIComponent(JSON.stringify(cfg));
@@ -34,13 +48,14 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const [saving, setSaving] = useState<{ name: string; description: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [coverage, setCoverage] = useState<{ dim: DimId; list: Coverage[] } | null>(null);
   const run = useRef(0);
   const shapeRef = useRef('');
 
   const m = METRICS[cfg.metric];
   const dsName = useCallback((id: string) => datasets.find((d) => d.id === id)?.name ?? id.slice(0, 8), [datasets]);
   const fmt = useCallback(
-    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'sub_brand' ? (v === '(없음)' ? '구분 없음' : subBrandName(v)) : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
+    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'sub_brand' ? (v === '(없음)' ? '구분 없음' : subBrandName(v)) : dim === 'course_type' && v === '(없음)' ? '구분 없음' : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
     [dsName]
   );
 
@@ -152,6 +167,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   function optionsFor(d: DimId): string[] {
     const all = values[d] ?? [];
     if (d === 'semester') return [...all].reverse();
+    if (d === 'course_type') return COURSE_TYPES.filter((v) => all.includes(v));
     if (d === 'sub_brand') {
       const order = Object.values(SUB_BRANDS).flat().map((s) => s.id); // Alpha · 4.0 · Regular · Prime · TO
       const rank = (v: string) => (order.indexOf(v) < 0 ? 99 : order.indexOf(v));
@@ -241,8 +257,10 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   // ---- derived view -------------------------------------------------------
   const filterDims = useMemo(() => {
     const extra = (Object.keys(cfg.filters) as DimId[]).filter((d) => !PINNED_FILTERS.includes(d));
-    return [...PINNED_FILTERS, ...extra];
-  }, [cfg.filters]);
+    // 수업 형태는 청담 자료가 보일 때만 (일반관·중등관 아래 주2회 ESL / ESL+EFL)
+    const hasCourse = (values.course_type ?? []).some((v) => v !== '(없음)') || !!cfg.filters.course_type?.length;
+    return [...PINNED_FILTERS.filter((d) => d !== 'course_type' || hasCourse), ...extra];
+  }, [cfg.filters, values.course_type]);
   const addable = DIMS.filter((d) => !filterDims.includes(d.id) && (values[d.id]?.filter((v) => v !== '(없음)').length ?? 0) > 0);
   const layoutDims = DIMS.filter((d) => (values[d.id]?.filter((v) => v !== '(없음)').length ?? 0) > 0 || d.id === cfg.rows || d.id === cfg.cols);
   const weeks = (values.week ?? []).filter((w) => w !== '(없음)').map(Number).sort((a, b) => a - b);
@@ -251,6 +269,37 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
 
   const timeCols = !!cfg.cols && TIME_DIMS.includes(cfg.cols);
   const timeColsDim = timeCols;
+  // 세부 항목으로 나눴는데 '(없음)'이 섞여 있으면, 그 항목이 있는 기간을 불러와 안내
+  const noneDim: DimId | null = result
+    ? ([cfg.rows, cfg.cols].find((d) => d && DETAIL_DIMS.includes(d) && (d === cfg.rows ? result.rowKeys : result.colKeys).includes('(없음)')) ?? null)
+    : null;
+  const coverageBrands = (cfg.filters.brand ?? []).join(',');
+  useEffect(() => {
+    if (!noneDim) {
+      setCoverage(null);
+      return;
+    }
+    let alive = true;
+    dimCoverage(cfg.metric, cfg.cut, noneDim, coverageBrands ? coverageBrands.split(',') : [])
+      .then((list) => alive && setCoverage({ dim: noneDim, list }))
+      .catch(() => alive && setCoverage(null));
+    return () => {
+      alive = false;
+    };
+  }, [noneDim, cfg.metric, cfg.cut, coverageBrands]);
+  const coverageText = useMemo(() => {
+    if (!coverage) return '';
+    const byBrand = new Map<string, Coverage[]>();
+    for (const c of coverage.list) if (c.partial) byBrand.set(c.brand, [...(byBrand.get(c.brand) ?? []), c]);
+    return [...byBrand.entries()]
+      .map(([b, list]) => {
+        const sems = list.sort((x, y) => compareLabels(y.semester, x.semester, 'semester'));
+        const shown = sems.slice(0, 3).map((c) => `${c.semester} ${weekRanges(c.weeks)}`).join(', ');
+        return `${brandName(b)}: ${shown}${sems.length > 3 ? ` 외 ${sems.length - 3}개 학기` : ''}`;
+      })
+      .join(' · ');
+  }, [coverage]);
+
   // 시간 축(주차·월·학기) 차트에서는 날짜를 모르는 '(없음)' 칸을 그리지 않습니다 (표에는 남김).
   const chartCols = useMemo(() => (result ? result.colKeys.filter((c) => !(timeColsDim && c === '(없음)')) : []), [result, timeColsDim]);
   const chart = useMemo(() => {
@@ -528,6 +577,15 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
         </div>
 
         <LoadBar progress={loading ? progress : null} />
+
+        {coverage && coverageText && (
+          <div className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-4 py-2.5 text-sm text-amber-100/90">
+            <p>
+              <b>{DIM_LABEL[coverage.dim]}</b> 정보는 일부 자료에만 있습니다. 표의 <b>(없음)</b>은 {DIM_LABEL[coverage.dim]} 구분 없이 합계만 있는 자료(학기 요약 시트 등)의 인원입니다.
+            </p>
+            <p className="mt-1 text-amber-100/70">{DIM_LABEL[coverage.dim]} 정보가 있는 기간 — {coverageText}</p>
+          </div>
+        )}
 
         {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/5 px-4 py-2.5 text-sm text-rose-300">{error}</p>}
 

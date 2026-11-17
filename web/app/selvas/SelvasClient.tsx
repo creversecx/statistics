@@ -89,7 +89,7 @@ export function SelvasClient({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
         <p className="max-w-md text-xs leading-relaxed text-white/60">
-          기준 주차 = 그 달에 시작하는 마지막 주 (새 학기 1주차면 앞 학기 마지막 주). 청담 Prime관은 일반관 기준 주차와 시작일이 같은 주. 다르게 보고했다면 카드마다 주차를 바꿀 수 있습니다.
+          기준 주차 = 그 달에 시작하는 마지막 주 (새 학기 1주차면 앞 학기 마지막 주). 청담 중등관은 일반관 기준 주차와 시작일이 같은 주. 다르게 보고했다면 카드마다 주차를 바꿀 수 있습니다.
         </p>
       </div>
 

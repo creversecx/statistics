@@ -3,8 +3,10 @@
  *
  *   브랜드      서브브랜드             프로그램                  레벨그룹 → 레벨
  *   April(AP)   Alpha · 4.0           (없음)                    Seedbed → Seedbed 1, Seed → Seed 2 … → 트랙 A·B
- *   CD          Regular · Prime · TO  C1 C2 C2D F1 A2 A3 V1 …   (Regular·Prime) EC1~4, Mega~Albatross+, MASTER
- *                                                              (TO) Thinker, Hypothesist, Experimenter …
+ *   CD          일반관(Regular)·중등관(Prime)  C1 C2 C2D F1 A2 A3 V1 …   EC1~4, Mega~Albatross+, MASTER
+ *               └ 수업 형태: 주2회 ESL (C1·C2 / C1·C2D / C1·C2·C2D, 여름·겨울 A2·A3·V1)
+ *                            ESL+EFL  (ESL 1개 + TO 수업: TO 레벨 Thinker, Hypothesist …) — 수강률 합계에선 뺌
+ *                            기타     (F1, Jump B2, MASTER 과정)
  *   iGarten(iG) (없음)                (없음)                    i5 → i5-1, i-Master → Draco …
  *
  * 알파와 4.0은 레벨 체계가 다릅니다: 알파 = Phonics Starter, Seedbed(단일), …, Rise Sapling 1·2, ivy 1·2 / 4.0 = Seedbed 1·2, …, Rookie.
@@ -21,9 +23,8 @@ export const SUB_BRANDS: Record<string, { id: string; name: string }[]> = {
     { id: '4.0', name: 'April 4.0' },
   ],
   CD: [
-    { id: 'Regular', name: 'CD Regular' },
-    { id: 'Prime', name: 'CD Prime' },
-    { id: 'TO', name: 'CD TO' },
+    { id: 'Regular', name: '일반관' },
+    { id: 'Prime', name: '중등관' },
   ],
   iG: [],
 };
@@ -87,7 +88,23 @@ const AP_FAMILIES: [RegExp, string][] = [
 ];
 const family = (s: string) => AP_FAMILIES.find(([re]) => re.test(s.trim()))?.[1] ?? null;
 
-export type Hierarchy = { sub_brand: string | null; program: string | null; level_group: string | null; level: string | null; track: string | null };
+export type Hierarchy = {
+  sub_brand: string | null;
+  program: string | null;
+  level_group: string | null;
+  level: string | null;
+  track: string | null;
+  /** 청담 수업 형태: 주2회 ESL · ESL+EFL · 기타 */
+  course_type?: string | null;
+};
+
+/** 청담 수업 형태 (0004 마이그레이션의 기존 데이터 변환과 같은 규칙) */
+export const COURSE_TYPES = ['주2회 ESL', 'ESL+EFL', '기타'] as const;
+const ESL_PROGRAMS = new Set(['C1', 'C2', 'C2D', 'A2', 'A3', 'V1']);
+export function courseTypeOf(program: string | null): string | null {
+  if (!program) return null;
+  return ESL_PROGRAMS.has(program) ? '주2회 ESL' : '기타';
+}
 
 /** "Seed 1A", "Seedbed B", "Level 2A", "[Alpha]Seed 1A_주2회" → A / B */
 function trackOf(...texts: (string | null)[]): string | null {
@@ -159,11 +176,11 @@ export function normalizeHierarchy(
 
   if (brand === 'CD') {
     if (sub === 'TO') {
-      // p-Learning 레벨 이름 뒤 학기 표시(_AU, _SP …)를 뗍니다.
-      return { sub_brand: sub, program: null, level_group: null, level: level ? level.replace(/_(AU|SP|SU|WI|FA|SM)$/i, '') : null, track: null };
+      // TO(The Open, p-Learning)는 일반관의 ESL+EFL 수업. 레벨 이름 뒤 학기 표시(_AU, _SP …)를 뗍니다.
+      return { sub_brand: 'Regular', program: null, level_group: null, level: level ? level.replace(/_(AU|SP|SU|WI|FA|SM)$/i, '') : null, track: null, course_type: 'ESL+EFL' };
     }
     const prog = program ? (/^c2\s*d(ebate)?$/i.test(program) ? 'C2D' : program) : null;
-    return { sub_brand: sub ?? 'Regular', program: prog, level_group: null, level, track: null };
+    return { sub_brand: sub ?? 'Regular', program: prog, level_group: null, level, track: null, course_type: courseTypeOf(prog) };
   }
 
   if (brand === 'iG') {

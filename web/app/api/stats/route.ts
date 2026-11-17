@@ -6,6 +6,7 @@ import { isDim } from '@/lib/dims';
 /**
  * { op: 'pivot', metric, rows, cols, filters, week_from, week_to } → { cells }
  * { op: 'dims', metric } → { values: { dim: [..] } }
+ * { op: 'coverage', metric, dim, brands } → { coverage: [{ brand, semester, weeks, partial }] }
  */
 export async function POST(req: Request) {
   const me = await requireUser();
@@ -17,6 +18,11 @@ export async function POST(req: Request) {
     if (body.op === 'dims') {
       const brands = Array.isArray(body.brands) ? body.brands.map(String).slice(0, 10) : [];
       return NextResponse.json({ values: await rpc('stat_dim_values', { metric, cut, brands }) });
+    }
+    if (body.op === 'coverage') {
+      if (!isDim(body.dim)) return NextResponse.json({ error: '알 수 없는 항목입니다.' }, { status: 400 });
+      const brands = Array.isArray(body.brands) ? body.brands.map(String).slice(0, 10) : [];
+      return NextResponse.json({ coverage: await rpc('stat_dim_coverage', { metric, cut, dim: body.dim, brands }) });
     }
     const filters: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(body.filters ?? {})) {
@@ -30,6 +36,7 @@ export async function POST(req: Request) {
       filters,
       week_from: Number.isInteger(body.week_from) ? body.week_from : null,
       week_to: Number.isInteger(body.week_to) ? body.week_to : null,
+      include_efl: body.include_efl === true,
     };
     return NextResponse.json({ cells: await rpc('stat_pivot', p) });
   } catch (e) {

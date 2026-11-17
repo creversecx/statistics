@@ -32,7 +32,7 @@ ERP·콘텐츠 학습 raw 엑셀을 올리면 **브랜드·학기·주차·월·
 | 브랜드 | 서브브랜드 | 프로그램 | 레벨그룹 → 레벨 | 아래 |
 |---|---|---|---|---|
 | April (AP) | Alpha · 4.0 (알파/4.0 열, 2024년 이전은 구분 없음) | 없음 | Seedbed·Seed·Sprout·Sapling·Rise Sapling·Junior Master·Rookie·ivy·Phonics → `Seed 1`, `Seedbed`(Alpha 단일), `Seedbed 1·2`(4.0), `Phonics Starter`, `ivy Prep·1·2` | 트랙 A·B (표에 있을 때) |
-| CD | Regular · Prime · TO (예전 The Open, 지금은 CD의 서브브랜드) | C1 C2 C2D F1 A2 A3 V1 + MASTER 계열(D·GL·IM·ST·WD) | Regular·Prime: EC1~4, Mega~Albatross+, MASTER / TO: Thinker·Hypothesist·Experimenter·Originator·Polymath·Starter (`_AU` 같은 학기 표시는 뗌) | |
+| CD | 일반관(Regular) · 중등관(Prime). 그 아래 **수업 형태**: 주2회 ESL(C1·C2 / C1·C2D / C1·C2·C2D, 여름·겨울 A2·A3·V1) · ESL+EFL(TO·The Open 수업, 일반관으로 합침) · 기타(F1·B2·MASTER) | C1 C2 C2D F1 A2 A3 V1 + MASTER 계열(D·GL·IM·ST·WD) | EC1~4, Mega~Albatross+, MASTER / TO: Thinker·Hypothesist·Experimenter·Originator·Polymath·Starter (`_AU` 같은 학기 표시는 뗌) | ESL+EFL(TO) 인원은 수강률 합계에서 빠지고, 수업 형태 필터·나누기로만 봅니다. ERP raw에 학생별 조합이 없어 ESL+EFL 학생의 ESL 수업(C1 등)은 주2회 ESL 쪽에 남습니다 |
 | iGarten (iG) | 없음 | 없음 | i4~i9, i-Master → `i5-1`, `Draco` … | |
 
 알파와 4.0은 레벨 체계가 다릅니다. 규칙은 `web/lib/levels.ts` 한 곳에 있고, 업로드와 기존 데이터 이관이 같은 규칙을 씁니다(2026-11-17 이관: 50만 행).
@@ -82,14 +82,14 @@ e-Library 구간별 완독 분포(학생 단위 분포)는 이번 범위에 없�
 | | 셀바스 대상 | 비고 |
 |---|---|---|
 | April | 기준 주차 수강생 − Phonics − ivy Level 1·2 (ivy Prep 포함), Rise Sapling은 Sapling에 합산 | 프로그램별로 보고 |
-| 청담 | 일반관(CD) + Prime관(CD_Prime) 수강생 중 참고사항의 프로그램·레벨만 (C2D = "C2 debate") | 결과적으로 TS·MASTER·B2 제외, 220원/명 VAT 포함 |
+| 청담 | 일반관(CD) + 중등관(CD_Prime) 수강생 중 참고사항의 프로그램·레벨만 (C2D = "C2 debate") | 결과적으로 TS·MASTER·B2 제외, 220원/명 VAT 포함 |
 
-- **기준 주차**: 그 달에 시작하는 마지막 주. 그 주가 새 학기 1주차면 앞 학기 마지막 주 (8월 = 여름 W13). 청담 Prime관은 일반관 기준 주차와 **시작일이 같은 주** (10월 = 일반관 W8 · Prime관 W9).
+- **기준 주차**: 그 달에 시작하는 마지막 주. 그 주가 새 학기 1주차면 앞 학기 마지막 주 (8월 = 여름 W13). 청담 중등관은 일반관 기준 주차와 **시작일이 같은 주** (10월 = 일반관 W8 · 중등관 W9).
 - **검증 (2026-11-17)**: April 8·9·10월 18,170 / 18,597 / 18,413 — 실제 청구 메일과 레벨별까지 일치.
   청담은 기준 주차 선택이 메일과 일치(8월 W12, 9월 W4·W4, 10월 W8·W9). 인원은 프로그램·레벨이 있는 ERP raw가 그 주차에 있어야 계산되며,
   받은 raw(Week 5~7)에서는 TS 제외 합계가 학기 요약 시트와 정확히 같고 셀바스 대상 = 요약 − MASTER 구조가 메일 숫자(요약 14,150.5 − 13,750.5 = MASTER 400)와 맞습니다.
 - **인원 단위**: ERP가 C1·C2·C2 debate처럼 함께 듣는 프로그램은 프로그램당 0.5명(2개 = 1명), F1 같은 단독 프로그램은 1명으로 세어 내보냅니다(raw의 F1 칸은 전부 정수). 그래서 학습대상자수를 그대로 더합니다.
-- **청담 메일 대조** (요약 수강생 − MASTER): 10월 일반관 W8 14,150.5 − 400 = 13,750.5, Prime관 W9 422.5 − 146.5 = 276 → 14,026.5 / 9월 일반관 W4 14,281 − 402 = 13,879, Prime관 W4 441.5 − 155.5 = 286. raw의 주당 MASTER(일반관 383~414, Prime관 136.5~155)와 맞습니다. 정확한 계산에는 그 주차의 raw가 필요합니다(받은 raw는 W5~7 = 10/5~10/25).
+- **청담 메일 대조** (요약 수강생 − MASTER): 10월 일반관 W8 14,150.5 − 400 = 13,750.5, 중등관 W9 422.5 − 146.5 = 276 → 14,026.5 / 9월 일반관 W4 14,281 − 402 = 13,879, 중등관 W4 441.5 − 155.5 = 286. raw의 주당 MASTER(일반관 383~414, 중등관 136.5~155)와 맞습니다. 정확한 계산에는 그 주차의 raw가 필요합니다(받은 raw는 W5~7 = 10/5~10/25).
 - 주차 시작일은 April·iG 주간 시트 제목의 날짜, 청담 학기 요약 시트의 주차 날짜에서 가져왔고, 날짜 없이 올라온 데이터는 같은 브랜드·학기·주차의 날짜를 이어받습니다.
 
 ## 보조 집계표 (cut)
@@ -124,7 +124,7 @@ npm run set-password -- kykim@creverse.com   # 로컬(또는 .env.local의 Supab
 ## 배포 (회사 계정 ulcdap@gmail.com)
 
 1. **GitHub**: ulcdap 계정(또는 그 조직)에 저장소를 만들고 이 폴더(`projects/statistics`)를 올립니다. `sample/`은 .gitignore로 제외됩니다.
-2. **Supabase**: 새 프로젝트 → SQL Editor에서 `supabase/migrations/`의 파일을 번호 순서대로 실행 (0001 → 0002). 다시 실행해도 안전합니다.
+2. **Supabase**: 새 프로젝트 → SQL Editor에서 `supabase/migrations/`의 파일을 번호 순서대로 실행 (0001 → 0002 → 0003 → 0004). 다시 실행해도 안전합니다.
    - 다른 사내 서비스도 같은 프로젝트로 옮길 계획이면 하나의 프로젝트에 접두사(`stat_`, QC는 기존 테이블명)로 나눠 두면 됩니다.
 3. **Resend**: 발신 도메인 인증 후 API 키 발급.
 4. **Vercel**: 저장소 import, Root Directory = `web`. 서버 함수 리전은 DB와 같은 도쿄(`hnd1`, `web/vercel.json`) — 기본값(미국 iad1)이면 요청마다 태평양을 여러 번 건너 느려집니다. 환경 변수는 `web/.env.example` 기준

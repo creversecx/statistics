@@ -398,7 +398,7 @@ export function guessBrand(fileName: string): string | null {
   return null;
 }
 
-/** CD의 서브브랜드: 시트·파일 이름에 Prime / p-Learning·The Open·TO가 있으면 그것, 아니면 Regular. */
+/** CD의 서브브랜드: 시트·파일 이름에 Prime이면 중등관, p-Learning·The Open·TO면 TO(→ 일반관 ESL+EFL), 아니면 일반관. */
 export function guessSubBrand(brand: string, name: string): string {
   if (brand !== 'CD') return '';
   const f = name.toLowerCase();
@@ -439,6 +439,7 @@ export type Constants = {
 export type FactRow = {
   brand: string;
   sub_brand: string | null;
+  course_type: string | null;
   track: string | null;
   year: number | null;
   term: string | null;
@@ -469,7 +470,7 @@ export type ParseResult = {
 };
 
 const KEY_FIELDS: (keyof FactRow)[] = [
-  'brand', 'sub_brand', 'semester', 'week', 'week_start', 'branch_type', 'branch', 'alpha', 'program', 'level',
+  'brand', 'sub_brand', 'course_type', 'semester', 'week', 'week_start', 'branch_type', 'branch', 'alpha', 'program', 'level',
   'level_group', 'track', 'grade', 'class_name', 'content', 'component',
 ];
 
@@ -565,6 +566,7 @@ export function extract(
     const fact: FactRow = {
       brand: k.brand,
       sub_brand: null,
+      course_type: null,
       track: null,
       year: sem?.year ?? yearCol,
       term: sem?.term ?? null,
@@ -592,6 +594,7 @@ export function extract(
     fact.level_group = h.level_group;
     fact.level = h.level;
     fact.track = h.track;
+    fact.course_type = h.course_type ?? null;
     const key = KEY_FIELDS.map((f) => fact[f] ?? '').join('\u0001');
     const prev = map.get(key);
     if (prev) {

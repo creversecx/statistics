@@ -57,6 +57,18 @@ export function pivotSteps(cfg: PivotConfig): number {
 
 const key = (r: string, c: string) => `${r}\u0001${c}`;
 
+/** ESL+EFL(TO) 인원은 수강률 합계에서 빠지고, 수업 형태로 나눠 볼 때만 들어갑니다 (수업 형태 필터를 골라도 들어감). */
+const includeEfl = (cfg: PivotConfig) => cfg.rows === 'course_type' || cfg.cols === 'course_type';
+
+export type Coverage = { brand: string; semester: string; weeks: number[]; partial: boolean };
+/** 어떤 차원(레벨·학원 …)이 들어 있는 학기·주차 — '(없음)' 안내용 */
+export async function dimCoverage(metric: Metric, cut: string | undefined, dim: DimId, brands: string[]): Promise<Coverage[]> {
+  const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'coverage', metric, cut: cut ?? '', dim, brands }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? '목록을 불러오지 못했습니다.');
+  return (data.coverage ?? []).map((c: Coverage) => ({ ...c, weeks: c.weeks.map(Number).sort((a, b) => a - b) }));
+}
+
 async function query(body: Record<string, unknown>): Promise<Cell[]> {
   const res = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
@@ -77,7 +89,7 @@ export async function dimValues(metric: Metric, cut?: string, brands: string[] =
 export async function resolveLatest(cfg: PivotConfig, tick: () => void = () => {}): Promise<PivotConfig> {
   if (!cfg.latest?.length && !cfg.recentMonths) return cfg;
   const filters = { ...cfg.filters };
-  const base = { metric: cfg.metric, cut: cfg.cut ?? '', week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
+  const base = { metric: cfg.metric, cut: cfg.cut ?? '', week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null, include_efl: includeEfl(cfg) };
   if (cfg.latest?.includes('semester') && !filters.semester?.length) {
     const cells = await query({ ...base, filters, rows: 'semester', cols: null });
     tick();
@@ -101,7 +113,7 @@ export async function resolveLatest(cfg: PivotConfig, tick: () => void = () => {
 }
 
 export async function runPivot(cfg: PivotConfig, tick: () => void = () => {}): Promise<PivotResult> {
-  const base = { metric: cfg.metric, cut: cfg.cut ?? '', filters: cfg.filters, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null };
+  const base = { metric: cfg.metric, cut: cfg.cut ?? '', filters: cfg.filters, week_from: cfg.week_from ?? null, week_to: cfg.week_to ?? null, include_efl: includeEfl(cfg) };
   const t = <T,>(p: Promise<T>) => p.then((v) => (tick(), v));
   const [cells, rowsOnly, colsOnly, total] = await Promise.all([
     t(query({ ...base, rows: cfg.rows, cols: cfg.cols })),

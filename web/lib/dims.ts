@@ -29,6 +29,7 @@ export const METRICS: Record<Metric, { label: string; short: string; denom: stri
 export const DIMS = [
   { id: 'brand', label: '브랜드' },
   { id: 'sub_brand', label: '서브브랜드' },
+  { id: 'course_type', label: '수업 형태 (CD)' },
   { id: 'semester', label: '학기' },
   { id: 'week', label: '주차' },
   { id: 'month', label: '월' },
@@ -50,7 +51,7 @@ export type DimId = (typeof DIMS)[number]['id'];
 export const DIM_LABEL = Object.fromEntries(DIMS.map((d) => [d.id, d.label])) as Record<DimId, string>;
 export const isDim = (v: unknown): v is DimId => DIMS.some((d) => d.id === v);
 
-/** 제일 큰 단위. 서브브랜드는 lib/levels.ts의 SUB_BRANDS (April Alpha·4.0 / CD Regular·Prime·TO). */
+/** 제일 큰 단위. 서브브랜드는 lib/levels.ts의 SUB_BRANDS (April Alpha·4.0 / CD 일반관·중등관). */
 export const BRANDS = [
   { id: 'AP', name: 'April' },
   { id: 'CD', name: 'CD' },
