@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BRANDS, METRICS, brandName, type Metric } from '@/lib/dims';
+import { SUB_BRANDS } from '@/lib/levels';
 import {
   FIELDS,
   colName,
@@ -10,6 +11,7 @@ import {
   extract,
   guessBrand,
   guessMetric,
+  guessSubBrand,
   unpivotWide,
   type Constants,
   type FactRow,
@@ -53,6 +55,7 @@ export function UploadClient() {
   const [layout, setLayout] = useState<Layout | null>(null);
   const [k, setK] = useState<Constants>({
     brand: '',
+    sub_brand: '',
     metric: 'enroll',
     semester: '',
     week: '',
@@ -101,7 +104,7 @@ export function UploadClient() {
       }
       setSheets(names);
       const brand = guessBrand(f.name);
-      setK((c) => ({ ...c, brand: brand ?? c.brand }));
+      setK((c) => ({ ...c, brand: brand ?? c.brand, sub_brand: brand ? guessSubBrand(brand, f.name) : c.sub_brand }));
       setName(f.name.replace(/\.[^.]+$/, ''));
       if (names.length === 1) await pick([names[0]], f, names);
     } catch (e) {
@@ -156,8 +159,8 @@ export function UploadClient() {
       const g = u ? u.grid : raw;
       setWide(u ? { leaves: u.leaves, rows: u.rows } : null);
       setGrid(g);
-      const sheetBrand = guessBrand(next[0]);
-      if (sheetBrand) setK((c) => ({ ...c, brand: sheetBrand }));
+      const sheetBrand = guessBrand(next[0]) ?? guessBrand(f?.name ?? '');
+      if (sheetBrand) setK((c) => ({ ...c, brand: sheetBrand, sub_brand: guessSubBrand(sheetBrand, `${next[0]} ${f?.name ?? ''}`) }));
       const l = detectLayout(g);
       setLayout(l);
       if (l) setK((c) => ({ ...c, metric: guessMetric(l) }));
@@ -563,7 +566,7 @@ export function UploadClient() {
             <p className="text-xs text-white/60">표에 없는 정보는 여기서 정합니다. 표에 열이 있으면 표가 우선입니다.</p>
           </div>
           <Field label="브랜드 *">
-            <select className="field !py-2" value={k.brand} onChange={(e) => setK({ ...k, brand: e.target.value })}>
+            <select className="field !py-2" value={k.brand} onChange={(e) => setK({ ...k, brand: e.target.value, sub_brand: guessSubBrand(e.target.value, picked[0] ?? '') })}>
               <option value="">고르세요</option>
               {BRANDS.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -572,6 +575,18 @@ export function UploadClient() {
               ))}
             </select>
           </Field>
+          {(SUB_BRANDS[k.brand] ?? []).length > 0 && (
+            <Field label="서브브랜드">
+              <select className="field !py-2" value={k.sub_brand ?? ''} onChange={(e) => setK({ ...k, sub_brand: e.target.value })}>
+                {k.brand === 'AP' && <option value="">표에서 (알파/4.0 열·수업명)</option>}
+                {SUB_BRANDS[k.brand].map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="지표 *">
             <select className="field !py-2" value={k.metric} onChange={(e) => setK({ ...k, metric: e.target.value as Metric })}>
               {(Object.keys(METRICS) as Metric[]).map((m) => (
@@ -706,7 +721,7 @@ export function UploadClient() {
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-base-900 text-white/55">
                 <tr>
-                  {['학기', '주차', '직/가맹', '학원', '알파', '프로그램', '레벨', '학년', '반', '콘텐츠', '유형', METRICS[k.metric].denom, METRICS[k.metric].numer, METRICS[k.metric].rate].map((h) => (
+                  {['학기', '주차', '서브브랜드', '직/가맹', '학원', '프로그램', '레벨그룹', '레벨', '학년', '반', '콘텐츠', '유형', METRICS[k.metric].denom, METRICS[k.metric].numer, METRICS[k.metric].rate].map((h) => (
                     <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left font-medium">
                       {h}
                     </th>
@@ -716,7 +731,7 @@ export function UploadClient() {
               <tbody>
                 {preview.rows.slice(0, 40).map((r, i) => (
                   <tr key={i} className="border-t border-line">
-                    {[r.semester, r.week, r.branch_type, r.branch, r.alpha, r.program, r.level, r.grade, r.class_name, r.content, r.component].map((v, j) => (
+                    {[r.semester, r.week, r.sub_brand, r.branch_type, r.branch, r.program, r.level_group, r.level, r.grade, r.class_name, r.content, r.component].map((v, j) => (
                       <td key={j} className="max-w-[160px] truncate whitespace-nowrap px-2 py-1 text-white/80">
                         {v ?? <span className="text-white/30">–</span>}
                       </td>

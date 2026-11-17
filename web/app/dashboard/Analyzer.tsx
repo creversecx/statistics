@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ALERT_RATE, DIMS, DIM_LABEL, METRICS, WARN_RATE, brandName, compareLabels, type DimId, type Metric } from '@/lib/dims';
+import { ALERT_RATE, DIMS, DIM_LABEL, METRICS, WARN_RATE, brandName, compareLabels, subBrandName, type DimId, type Metric } from '@/lib/dims';
 import { PRESETS, TIME_DIMS, counts, dimValues, getCell, rateOf, resolveLatest, runPivot, type PivotConfig, type PivotResult } from '@/lib/pivot';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { LineChart } from '@/components/charts/LineChart';
@@ -13,7 +13,7 @@ type Report = { id: string; name: string; description: string; config: PivotConf
 type DatasetLite = { id: string; name: string };
 
 const DEFAULT: PivotConfig = PRESETS[1].config;
-const PINNED_FILTERS: DimId[] = ['brand', 'semester'];
+const PINNED_FILTERS: DimId[] = ['brand', 'sub_brand', 'semester'];
 
 function encode(cfg: PivotConfig) {
   return encodeURIComponent(JSON.stringify(cfg));
@@ -41,7 +41,7 @@ export function Analyzer({ me }: { me: { email: string; role: string } }) {
   const m = METRICS[cfg.metric];
   const dsName = useCallback((id: string) => datasets.find((d) => d.id === id)?.name ?? id.slice(0, 8), [datasets]);
   const fmt = useCallback(
-    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
+    (dim: DimId | null) => (v: string) => (dim === 'brand' ? brandName(v) : dim === 'sub_brand' ? subBrandName(v) : dim === 'dataset' ? dsName(v) : dim === 'week' && v !== '(없음)' ? `${v}주` : v),
     [dsName]
   );
 

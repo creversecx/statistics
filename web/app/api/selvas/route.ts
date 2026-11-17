@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fail, isResponse, requireSuperAdmin, requireUser } from '@/lib/auth';
 import { rpc } from '@/lib/db';
 
-const BRANDS = ['AP', 'CD', 'CD_Prime'];
+const BRANDS = ['AP', 'CD'];
 
 /**
  * { op: 'weeks' }                         → 정산 대상 브랜드의 주차·시작일 목록
@@ -27,7 +27,8 @@ export async function POST(req: Request) {
       if (!BRANDS.includes(body.brand) || !body.semester || !Number.isInteger(body.week)) {
         return NextResponse.json({ error: '브랜드·학기·주차가 필요합니다.' }, { status: 400 });
       }
-      return NextResponse.json(await rpc('stat_program_counts', { brand: body.brand, semester: String(body.semester), week: body.week }));
+      const sub = typeof body.sub_brand === 'string' ? body.sub_brand : null;
+      return NextResponse.json(await rpc('stat_program_counts', { brand: body.brand, sub_brand: sub, semester: String(body.semester), week: body.week }));
     }
     return NextResponse.json({ error: '알 수 없는 요청입니다.' }, { status: 400 });
   } catch (e) {

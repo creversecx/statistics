@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TARGETS, billingWeeks, computeBill, fmtCount, prevMonth, type Bill, type ProgramRow, type Target, type WeekInfo } from '@/lib/selvas';
+import { TARGETS, billingWeeks, computeBill, partWeeks, fmtCount, prevMonth, type Bill, type ProgramRow, type Target, type WeekInfo } from '@/lib/selvas';
 
 type Settings = { unitPrice?: Record<string, number | null> };
 
@@ -18,12 +18,12 @@ async function post<T>(body: unknown): Promise<T> {
 }
 
 const countsCache = new Map<string, Promise<{ cut: string; rows: ProgramRow[] }>>();
-function counts(brand: string, w: WeekInfo) {
-  const k = `${brand}|${w.semester}|${w.week}`;
+function counts(brand: string, subBrand: string | undefined, w: WeekInfo) {
+  const k = `${brand}|${subBrand ?? ''}|${w.semester}|${w.week}`;
   if (!countsCache.has(k)) {
     countsCache.set(
       k,
-      post<{ cut: string; rows: ProgramRow[] }>({ op: 'counts', brand, semester: w.semester, week: w.week }).then((r) => ({
+      post<{ cut: string; rows: ProgramRow[] }>({ op: 'counts', brand, sub_brand: subBrand ?? null, semester: w.semester, week: w.week }).then((r) => ({
         cut: r.cut,
         rows: r.rows.map((x) => ({ ...x, d: Number(x.d), n: Number(x.n) })),
       }))
@@ -133,7 +133,7 @@ export function SelvasClient({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-type PartState = { brand: string; label: string; week: WeekInfo | null; bill: Bill | null; cut: string; noProgram: boolean; summaryTotal: number | null; loading: boolean };
+type PartState = { key: string; brand: string; subBrand?: string; label: string; week: WeekInfo | null; bill: Bill | null; cut: string; noProgram: boolean; summaryTotal: number | null; loading: boolean };
 
 function TargetCard({
   target,
@@ -150,7 +150,7 @@ function TargetCard({
   isAdmin: boolean;
   onPrice: (v: number | null) => void;
 }) {
-  const [chosen, setChosen] = useState<Record<string, string>>({}); // brand → weekKey override
+  const [chosen, setChosen] = useState<Record<string, string>>({}); // part key → weekKey override
   const [parts, setParts] = useState<PartState[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [priceDraft, setPriceDraft] = useState<string>(unitPrice?.toString() ?? '');
@@ -158,24 +158,24 @@ function TargetCard({
   useEffect(() => setChosen({}), [month]);
   useEffect(() => setPriceDraft(unitPrice?.toString() ?? ''), [unitPrice]);
 
-  const brandWeeks = useCallback((brand: string) => weeks.filter((w) => w.brand === brand), [weeks]);
+  const brandWeeks = useCallback((key: string) => partWeeks(target.parts.find((p) => p.key === key)!, weeks), [weeks, target]);
 
   useEffect(() => {
     let alive = true;
     const auto = billingWeeks(target, weeks, month);
     const base: PartState[] = target.parts.map((p) => {
-      const list = brandWeeks(p.brand);
-      const override = chosen[p.brand] ? list.find((w) => weekKey(w) === chosen[p.brand]) : null;
-      const week = override ?? auto[p.brand];
+      const list = brandWeeks(p.key);
+      const override = chosen[p.key] ? list.find((w) => weekKey(w) === chosen[p.key]) : null;
+      const week = override ?? auto[p.key];
       return { ...p, week, bill: null, cut: '', noProgram: false, summaryTotal: null, loading: !!week };
     });
     setParts(base);
     base.forEach((p, i) => {
       if (!p.week) return;
-      counts(p.brand, p.week)
+      counts(p.brand, p.subBrand, p.week)
         .then((r) => {
           if (!alive) return;
-          const noProgram = r.rows.every((x) => x.program === '(없음)');
+          const noProgram = r.rows.every((x) => x.program === '(없음)' && x.level === '(없음)');
           const summaryTotal = r.rows.reduce((a, x) => a + x.n, 0);
           setParts((cur) => cur.map((c, j) => (j === i ? { ...c, cut: r.cut, noProgram, summaryTotal, bill: noProgram ? null : computeBill(target, p.week!, r.rows), loading: false } : c)));
         })
@@ -238,9 +238,9 @@ function TargetCard({
       </div>
 
       {parts.map((p) => {
-        const list = brandWeeks(p.brand).slice().sort((a, b) => ((b.week_start ?? '') < (a.week_start ?? '') ? -1 : 1));
+        const list = brandWeeks(p.key).slice().sort((a, b) => ((b.week_start ?? '') < (a.week_start ?? '') ? -1 : 1));
         return (
-          <div key={p.brand} className="rounded-xl border border-line p-3">
+          <div key={p.key} className="rounded-xl border border-line p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-semibold">{p.label}</span>
               <label className="flex items-center gap-2 text-xs text-white/65">
@@ -248,7 +248,7 @@ function TargetCard({
                 <select
                   className="field !w-auto !rounded-lg !py-1 !text-xs"
                   value={p.week ? weekKey(p.week) : ''}
-                  onChange={(e) => setChosen({ ...chosen, [p.brand]: e.target.value })}
+                  onChange={(e) => setChosen({ ...chosen, [p.key]: e.target.value })}
                 >
                   {!p.week && <option value="">이 달 주차 없음</option>}
                   {list.map((w) => (

@@ -27,6 +27,17 @@ ERP·콘텐츠 학습 raw 엑셀을 올리면 **브랜드·학기·주차·월·
 모든 DB 접근은 `supabase/migrations/0001_init.sql`의 `stat_*` 함수(jsonb 하나 받고 jsonb 반환)를 `supabase.rpc()`로 부릅니다.
 그래서 같은 SQL이 **로컬에서는 PGlite(프로세스 안 Postgres)**, 운영에서는 Supabase에서 똑같이 돕니다 (`web/lib/db.ts`).
 
+## 브랜드 위계
+
+| 브랜드 | 서브브랜드 | 프로그램 | 레벨그룹 → 레벨 | 아래 |
+|---|---|---|---|---|
+| April (AP) | Alpha · 4.0 (알파/4.0 열, 2024년 이전은 구분 없음) | 없음 | Seedbed·Seed·Sprout·Sapling·Rise Sapling·Junior Master·Rookie·ivy·Phonics → `Seed 1`, `Seedbed`(Alpha 단일), `Seedbed 1·2`(4.0), `Phonics Starter`, `ivy Prep·1·2` | 트랙 A·B (표에 있을 때) |
+| CD | Regular · Prime · TO (예전 The Open, 지금은 CD의 서브브랜드) | C1 C2 C2D F1 A2 A3 V1 + MASTER 계열(D·GL·IM·ST·WD) | Regular·Prime: EC1~4, Mega~Albatross+, MASTER / TO: Thinker·Hypothesist·Experimenter·Originator·Polymath·Starter (`_AU` 같은 학기 표시는 뗌) | |
+| iGarten (iG) | 없음 | 없음 | i4~i9, i-Master → `i5-1`, `Draco` … | |
+
+알파와 4.0은 레벨 체계가 다릅니다. 규칙은 `web/lib/levels.ts` 한 곳에 있고, 업로드와 기존 데이터 이관이 같은 규칙을 씁니다(2026-11-17 이관: 50만 행).
+"C2 debate"는 C2D로 저장합니다. April 트랙은 원래 A = 봄·가을, B = 여름·겨울이지만 A·B를 같이 운영하는 레벨도 있어서 학기로 추정하지 않고 표에 적힌 값만 씁니다.
+
 ## 데이터 모델
 
 샘플 자료를 분석해 보면 모든 보고서가 두 지표의 피벗입니다.

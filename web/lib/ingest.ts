@@ -25,6 +25,7 @@ import {
   weekStartFromLabel,
   type Metric,
 } from './dims';
+import { normalizeHierarchy } from './levels';
 
 export type FieldId =
   | 'ignore'
@@ -389,12 +390,21 @@ export function colName(i: number) {
 
 export function guessBrand(fileName: string): string | null {
   const f = fileName.toLowerCase();
-  if (/prime/.test(f)) return 'CD_Prime';
+  if (/prime/.test(f)) return 'CD';
   if (/i-?garten|igarten|\big\b|아이가튼/.test(f)) return 'iG';
   if (/april|에이프릴|\bap\b|meme|buff|v-class|vena/.test(f)) return 'AP';
-  if (/the\s*open|p-learning|\bto\b/.test(f)) return 'TO';
+  if (/the\s*open|p-learning|\bto\b/.test(f)) return 'CD';
   if (/청담|cdi|\bcd\b/.test(f)) return 'CD';
   return null;
+}
+
+/** CD의 서브브랜드: 시트·파일 이름에 Prime / p-Learning·The Open·TO가 있으면 그것, 아니면 Regular. */
+export function guessSubBrand(brand: string, name: string): string {
+  if (brand !== 'CD') return '';
+  const f = name.toLowerCase();
+  if (/prime/.test(f)) return 'Prime';
+  if (/the\s*open|p-learning|(^|[^a-z])to([^a-z]|$)/.test(f)) return 'TO';
+  return 'Regular';
 }
 
 export function guessMetric(layout: Layout): Metric {
@@ -413,6 +423,8 @@ export function yearFromName(name: string): number | null {
 
 export type Constants = {
   brand: string;
+  /** '' = 표에서 찾기 (April: 알파/4.0 열·수업명) */
+  sub_brand?: string;
   metric: Metric;
   semester: string; // used when no column and the sheet name has none
   week: string;
@@ -426,6 +438,8 @@ export type Constants = {
 
 export type FactRow = {
   brand: string;
+  sub_brand: string | null;
+  track: string | null;
   year: number | null;
   term: string | null;
   semester: string | null;
@@ -455,8 +469,8 @@ export type ParseResult = {
 };
 
 const KEY_FIELDS: (keyof FactRow)[] = [
-  'brand', 'semester', 'week', 'week_start', 'branch_type', 'branch', 'alpha', 'program', 'level',
-  'level_group', 'grade', 'class_name', 'content', 'component',
+  'brand', 'sub_brand', 'semester', 'week', 'week_start', 'branch_type', 'branch', 'alpha', 'program', 'level',
+  'level_group', 'track', 'grade', 'class_name', 'content', 'component',
 ];
 
 function addDays(iso: string, days: number) {
@@ -550,6 +564,8 @@ export function extract(
 
     const fact: FactRow = {
       brand: k.brand,
+      sub_brand: null,
+      track: null,
       year: sem?.year ?? yearCol,
       term: sem?.term ?? null,
       semester: sem?.label ?? null,
@@ -569,6 +585,13 @@ export function extract(
       denom: d as number,
       numer: isNum(n) ? (n as number) : 0,
     };
+    // 브랜드 위계: 서브브랜드, 프로그램(CD만), 레벨그룹, 레벨 이름 정리
+    const h = normalizeHierarchy(k.brand, { sub_brand: k.sub_brand || null, program: fact.program, level: fact.level, level_group: fact.level_group, alpha: fact.alpha });
+    fact.sub_brand = h.sub_brand;
+    fact.program = h.program;
+    fact.level_group = h.level_group;
+    fact.level = h.level;
+    fact.track = h.track;
     const key = KEY_FIELDS.map((f) => fact[f] ?? '').join('\u0001');
     const prev = map.get(key);
     if (prev) {

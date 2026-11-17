@@ -3,6 +3,8 @@
  * Shared by the browser (upload parsing, pivot UI) and the server.
  */
 
+import { LEVEL_GROUP_ORDER, LEVEL_ORDER, SUB_BRANDS } from './levels';
+
 export type Metric = 'enroll' | 'complete';
 
 export const METRICS: Record<Metric, { label: string; short: string; denom: string; numer: string; rate: string; hint: string }> = {
@@ -26,15 +28,16 @@ export const METRICS: Record<Metric, { label: string; short: string; denom: stri
 
 export const DIMS = [
   { id: 'brand', label: '브랜드' },
+  { id: 'sub_brand', label: '서브브랜드' },
   { id: 'semester', label: '학기' },
   { id: 'week', label: '주차' },
   { id: 'month', label: '월' },
   { id: 'branch_type', label: '직/가맹' },
   { id: 'branch', label: '학원' },
-  { id: 'alpha', label: '알파/4.0' },
-  { id: 'program', label: '프로그램' },
-  { id: 'level', label: '레벨' },
+  { id: 'program', label: '프로그램 (CD)' },
   { id: 'level_group', label: '레벨 그룹' },
+  { id: 'level', label: '레벨' },
+  { id: 'track', label: '트랙 (AP)' },
   { id: 'grade', label: '학년' },
   { id: 'grade_group', label: '학년그룹' },
   { id: 'class_name', label: '반' },
@@ -47,14 +50,14 @@ export type DimId = (typeof DIMS)[number]['id'];
 export const DIM_LABEL = Object.fromEntries(DIMS.map((d) => [d.id, d.label])) as Record<DimId, string>;
 export const isDim = (v: unknown): v is DimId => DIMS.some((d) => d.id === v);
 
+/** 제일 큰 단위. 서브브랜드는 lib/levels.ts의 SUB_BRANDS (April Alpha·4.0 / CD Regular·Prime·TO). */
 export const BRANDS = [
-  { id: 'CD', name: '청담 일반관' },
-  { id: 'CD_Prime', name: '청담 Prime관' },
   { id: 'AP', name: 'April' },
-  { id: 'iG', name: 'i-GARTEN' },
-  { id: 'TO', name: 'The Open' },
+  { id: 'CD', name: 'CD' },
+  { id: 'iG', name: 'iGarten' },
 ] as const;
 export const brandName = (id: string) => BRANDS.find((b) => b.id === id)?.name ?? id;
+export const subBrandName = (id: string) => SUB_BRANDS.AP.concat(SUB_BRANDS.CD).find((s) => s.id === id)?.name ?? id;
 
 // ---------------------------------------------------------------------------
 // 학기
@@ -161,6 +164,12 @@ export function compareLabels(a: string, b: string, dim?: string): number {
     const oa = semesterOrder(a);
     const ob = semesterOrder(b);
     if (oa !== null && ob !== null && oa !== ob) return oa - ob;
+  }
+  if (dim === 'level' || dim === 'level_group') {
+    const list = dim === 'level' ? LEVEL_ORDER : LEVEL_GROUP_ORDER;
+    const ia = list.indexOf(a);
+    const ib = list.indexOf(b);
+    if (ia >= 0 || ib >= 0) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
   }
   const na = Number(a);
   const nb = Number(b);

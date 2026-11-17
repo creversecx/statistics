@@ -50,10 +50,16 @@ export const PRESETS: { id: string; name: string; description: string; config: P
     config: { metric: 'enroll', rows: 'branch_type', cols: 'week', filters: {}, latest: ['semester'], showCounts: true },
   },
   {
+    id: 'p-sub-week',
+    name: '서브브랜드 주차 추이',
+    description: '최신 학기 Alpha·4.0 / Regular·Prime·TO',
+    config: { metric: 'enroll', rows: 'sub_brand', cols: 'week', filters: {}, latest: ['semester'], showCounts: true },
+  },
+  {
     id: 'p-level-week',
     name: '레벨별 주차 추이',
-    description: '최신 학기 레벨별 수강률',
-    config: { metric: 'enroll', rows: 'level', cols: 'week', filters: {}, latest: ['semester'] },
+    description: '최신 학기 레벨별 수강률 (브랜드·서브브랜드를 골라 보세요)',
+    config: { metric: 'enroll', rows: 'level', cols: 'week', filters: { brand: ['AP'] }, latest: ['semester'] },
   },
   {
     id: 'p-brand-month',

@@ -14,6 +14,7 @@
 
 export type WeekInfo = {
   brand: string;
+  sub_brand?: string | null;
   semester: string;
   sem_order: number | null;
   term: string | null;
@@ -22,7 +23,7 @@ export type WeekInfo = {
   has_program: boolean;
 };
 
-export type ProgramRow = { program: string; level: string; d: number; n: number };
+export type ProgramRow = { program: string; level_group?: string; level: string; d: number; n: number };
 
 export type Target = {
   id: 'AP' | 'CD';
@@ -32,11 +33,11 @@ export type Target = {
    * starts on the same date as that part's billing week (Prime관 numbers its weeks differently:
    * 9월 = 일반관 W4 / Prime관 W4 (09-21), 10월 = 일반관 W8 / Prime관 W9 (10-26)).
    */
-  parts: { brand: string; label: string; sameDateAs?: string }[];
+  parts: { key: string; brand: string; subBrand?: string; label: string; sameDateAs?: string }[];
   /** Is this program·level counted? `term` decides 봄/가을 vs 여름/겨울 lists. */
-  counts: (program: string, level: string, term: string | null) => boolean;
+  counts: (r: ProgramRow, term: string | null) => boolean;
   /** How the bill groups the counted students (April: by 프로그램; 청담: one number per 관). */
-  groupOf: (program: string, level: string) => string;
+  groupOf: (r: ProgramRow) => string;
   groupOrder: string[];
   rules: string[];
   unitPriceDefault: number | null; // 원/명, VAT 포함
@@ -68,19 +69,21 @@ export const TARGETS: Target[] = [
   {
     id: 'AP',
     name: 'April',
-    parts: [{ brand: 'AP', label: 'April' }],
-    counts: (program, level) => {
-      if (/^phonics$/i.test(program)) return false;
-      if (/^ivy$/i.test(program)) return /^prep$/i.test(level);
-      return program !== '(없음)';
+    parts: [{ key: 'AP', brand: 'AP', label: 'April (Alpha + 4.0)' }],
+    // April에는 프로그램이 없고 레벨그룹(Seedbed·Seed…)과 레벨(Seed 1…)이 있습니다.
+    counts: (r) => {
+      const g = r.level_group ?? '(없음)';
+      if (/^phonics/i.test(g) || /^phonics/i.test(r.level)) return false;
+      if (/^ivy/i.test(g)) return /prep/i.test(r.level);
+      return g !== '(없음)';
     },
-    groupOf: (program) => program,
+    groupOf: (r) => r.level_group ?? r.level,
     groupOrder: ['Seedbed', 'Seed', 'Sprout', 'Sapling', 'Junior Master', 'Rookie', 'ivy'],
     rules: [
-      '기준 주차의 온라인 수강생(학습대상자) 수',
+      '기준 주차의 온라인 수강생(학습대상자) 수, Alpha + 4.0 합산',
       'Phonics 제외',
       'ivy는 Prep만 포함 (ivy Level 1·2는 셀바스 엔진 미사용, 26 봄학기부터)',
-      '프로그램(레벨 그룹)별로 묶어서 보고',
+      '레벨 그룹(Seedbed·Seed·Sprout·Sapling·Junior Master·Rookie)별로 묶어서 보고',
     ],
     unitPriceDefault: null,
   },
@@ -88,14 +91,14 @@ export const TARGETS: Target[] = [
     id: 'CD',
     name: '청담',
     parts: [
-      { brand: 'CD', label: '일반관' },
-      { brand: 'CD_Prime', label: 'Prime관', sameDateAs: 'CD' },
+      { key: 'CD/Regular', brand: 'CD', subBrand: 'Regular', label: '일반관' },
+      { key: 'CD/Prime', brand: 'CD', subBrand: 'Prime', label: 'Prime관', sameDateAs: 'CD/Regular' },
     ],
-    counts: (program, level, term) => {
+    counts: (r, term) => {
       const set = term === '여름' || term === '겨울' ? CD_LEVELS.여름겨울 : CD_LEVELS.봄가을;
-      return (set[cdProgram(program)] ?? []).includes(level.trim());
+      return (set[cdProgram(r.program)] ?? []).includes(r.level.trim());
     },
-    groupOf: (program) => cdProgram(program),
+    groupOf: (r) => cdProgram(r.program),
     groupOrder: ['C1', 'C2', 'C2D', 'F1', 'A2', 'A3', 'V1'],
     rules: [
       '기준 주차의 i-Learning 수강생(학습대상자) 수, 일반관 + Prime관 합산',
@@ -128,14 +131,31 @@ export function billingWeek(weeks: WeekInfo[], month: string): WeekInfo | null {
 }
 
 /** Billing week for every part of a target, applying `sameDateAs`. */
+/** The weeks of one part: its brand, and its sub-brand when it has one (CD Regular / Prime number weeks separately). */
+export const partWeeks = (part: Target['parts'][number], weeks: WeekInfo[]) => {
+  const own = weeks.filter((w) => w.brand === part.brand && (!part.subBrand || w.sub_brand === part.subBrand));
+  // April: Alpha와 4.0이 같은 주차를 쓰므로 주차 하나로 합칩니다.
+  const seen = new Map<string, WeekInfo>();
+  for (const w of own) {
+    const k = `${w.semester}|${w.week}`;
+    const prev = seen.get(k);
+    if (!prev) seen.set(k, { ...w });
+    else {
+      prev.has_program = prev.has_program || w.has_program;
+      if (!prev.week_start || (w.week_start && w.week_start < prev.week_start)) prev.week_start = w.week_start;
+    }
+  }
+  return [...seen.values()];
+};
+
 export function billingWeeks(target: Target, weeks: WeekInfo[], month: string): Record<string, WeekInfo | null> {
   const out: Record<string, WeekInfo | null> = {};
   for (const p of target.parts) {
-    const own = weeks.filter((w) => w.brand === p.brand);
+    const own = partWeeks(p, weeks);
     const anchor = p.sameDateAs ? out[p.sameDateAs] : null;
     const aligned = anchor?.week_start ? own.find((w) => w.week_start === anchor.week_start) ?? null : null;
     // No same-date week (e.g. 8월, before Prime opened) means that part is not billed that month.
-    out[p.brand] = p.sameDateAs ? (anchor ? aligned : null) : billingWeek(own, month);
+    out[p.key] = p.sameDateAs ? (anchor ? aligned : null) : billingWeek(own, month);
   }
   return out;
 }
@@ -154,8 +174,8 @@ export function computeBill(target: Target, week: WeekInfo, rows: ProgramRow[]):
   let total = 0;
   for (const r of rows) {
     total += r.n;
-    if (target.counts(r.program, r.level, week.term)) {
-      const g = target.groupOf(r.program, r.level);
+    if (target.counts(r, week.term)) {
+      const g = target.groupOf(r);
       groups.set(g, (groups.get(g) ?? 0) + r.n);
     } else {
       const key = target.id === 'CD' && r.level === 'MASTER' ? 'MASTER' : `${r.program}${r.level !== '(없음)' ? ` ${r.level}` : ''}`;
